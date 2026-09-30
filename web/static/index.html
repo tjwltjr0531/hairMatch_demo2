@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script>
+  /* 카카오 지도 SDK 는 등록한 도메인(http://localhost:8000)에서만 동작한다.
+     127.0.0.1 은 브라우저가 다른 주소로 취급하므로, 첫 화면에서 localhost 로 바꿔 연다.
+     (결과 화면에서 바꾸면 사진·분석 결과 저장소가 달라져 사라지므로 여기서만 한다) */
+  if (location.hostname === '127.0.0.1') {
+    location.replace(location.href.replace('//127.0.0.1', '//localhost'));
+  }
+</script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HAIRMATCH — 얼굴형 분석 기반 헤어스타일 추천</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" as="style" crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<!--
+  index.html — 디자인 초안
+
+  기능 계약은 그대로 유지했다. a.html 이 이 이름들을 기대한다.
+    id   fileInput, uploadSlot, optionFormArea, genderSelect,
+         consentCheck, analyzeBtn, guestBtn, userStatusBtn, sidebarRight, userNameSlot
+    fn   handleFileSelection(), toggleAnalyzeBtn(), requestAnalysis(), fireLogout()
+    추가 savePhotoForNextPage()   ← File 은 localStorage 에 못 넣는다. 이게 없으면
+                                    a.html 에 합성할 사진이 없다
+
+  이전 버전에서 고친 것
+  ─────────────────────────────────────────────
+  1. 이모지 제거            OS 마다 다르게 렌더돼 톤이 깨진다. 선 아이콘/번호로 교체
+  2. 그림자 → 1px 선        보라 그림자가 모든 요소에 깔려 화면이 뿌옇게 보였다
+  3. radius 20px → 0~2px    큰 라운드가 물렁해 보였다. 각진 편집 레이아웃으로
+  4. 팔레트 축소            무채색 + 웜 베이지. 합성 결과의 머리색/피부톤이 정확히 읽힌다
+  5. 간격 8의 배수로 통일    이전엔 40/36/42/48/32/24… 규칙이 없었다
+  6. 굵기 300/400/500/700   대부분 800 이라 강조가 강조로 안 읽혔다
+  7. 업로드를 히어로 직후로  레퍼런스는 브랜드 사이트라 CTA 가 없다. 이건 도구다
+  8. 문구 정정             MediaPipe → CNN, 3~5초 → 약 10초, 100% 무료 → 조건 명시
+
+  이미지는 자리만 잡아 뒀다. img/ 아래에 같은 이름으로 넣으면 바로 붙는다.
+    img/logo-mark.svg     히어로 오른쪽 로고 마크 (벡터)
+    img/before-m.jpg      Before & After — 남성 원본
+    img/after-m.jpg       Before & After — 남성 합성 결과
+    img/step-01~04.jpg    4단계 설명               5:4
+    img/styles/{slug}.jpg 스타일 10종 — input\ref_{slug}.png 정렬본을 이름만 바꿔 넣으면 된다
+                          여성 tucked_bob hush long_wave full_bang gh
+                          남성 regent dandy asperm leaf hippie
+-->
+<style>
+/* ══════════════════════════════════════════════
+   토큰
+   ══════════════════════════════════════════════ */
+:root{
+  /* 무채색 + 웜 베이지. 합성 결과가 주인공이 되도록 배경은 물러난다 */
+  --ink:      #16130F;
+  --ink-2:    #3D362D;
+  --ink-3:    #7A7168;
+  --line:     #E4DED4;
+  --line-2:   #CFC6B9;
+  --paper:    #FBF9F6;
+  --paper-2:  #F3EEE7;
+  --surface:  #FFFFFF;
+  --accent:   #8A7355;   /* 웜 브라운. 포인트에만 */
+  --dark:     #16130F;
+
+  /* 8의 배수 */
+  --s1: 8px;  --s2: 16px; --s3: 24px; --s4: 32px;
+  --s5: 48px; --s6: 64px; --s7: 96px; --s8: 128px;
+
+  --serif: 'Cormorant Garamond', Georgia, serif;
+  --sans : 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+*{ box-sizing: border-box; }
+html{ scroll-behavior: smooth; }
+body{
+  margin:0; background: var(--paper); color: var(--ink);
+  font-family: var(--sans); font-weight: 400; font-size: 15px; line-height: 1.75;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+img{ display:block; max-width:100%; }
+button{ font-family: inherit; }
+/* img{display:block} 같은 규칙이 hidden 속성을 덮어쓰지 않게 */
+[hidden]{ display:none !important; }
+
+.wrap{ max-width: 1240px; margin: 0 auto; padding: 0 var(--s4); }
+
+/* 영문 대문자 라벨 — 섹션의 눈금 역할 */
+.eyebrow{
+  font-size: 11px; font-weight: 500; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink-3); margin: 0 0 var(--s2);
+}
+/* 영문 디스플레이는 세리프, 한글 헤드라인은 산세리프.
+   한글 명조는 웹폰트 용량이 크고 렌더가 고르지 않아 쓰지 않는다. */
+.display{
+  font-family: var(--serif); font-weight: 300;
+  font-size: clamp(38px, 5.6vw, 74px); line-height: 1.06;
+  letter-spacing: -.01em; margin: 0;
+}
+.h-ko{
+  font-size: clamp(21px, 2.3vw, 30px); font-weight: 700;
+  line-height: 1.5; letter-spacing: -.02em; margin: 0 0 var(--s2);
+}
+.body-ko{ color: var(--ink-2); margin: 0; max-width: 46ch; }
+.muted{ color: var(--ink-3); }
+
+hr.rule{ border:0; border-top:1px solid var(--line); margin:0; }
+
+/* 이미지 자리 — 파일이 없으면 이름이 보인다 */
+.fig{
+  position: relative; margin: 0; overflow: hidden;
+  background: var(--paper-2);
+  display: flex; align-items: center; justify-content: center;
+}
+.fig::after{
+  content: attr(data-src); position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; letter-spacing: .06em; color: var(--ink-3);
+  border: 1px dashed var(--line-2); pointer-events: none;
+}
+.fig img{ position: relative; z-index: 1; width:100%; height:100%; object-fit: cover; }
+.fig img[hidden]{ display:none; }
+
+/* ══════════════════════════════════════════════
+   상단바
+   ══════════════════════════════════════════════ */
+.topbar{
+  position: sticky; top: 0; z-index: 40;
+  background: #16130F; color:#FBF9F6;
+}
+.topbar .wrap{ display:grid; grid-template-columns: 1fr auto 1fr; align-items:center; height: 60px; }
+.wordmark{
+  font-family: var(--sans); font-size: 14px; font-weight: 600;
+  letter-spacing: .2em; text-decoration: none; color: var(--ink);
+}
+.topbar .wordmark{ color:#FBF9F6; justify-self:start; }
+.nav{ display:flex; align-items:center; gap: var(--s5); justify-self:center; }
+.nav a.link{ font-size: 12px; color: rgba(251,249,246,.78); text-decoration:none; letter-spacing:.04em; }
+.nav a.link:hover{ color:#FFF; }
+.topbar .account-wrap{ justify-self:end; }
+/* 사람 아이콘 버튼 — 로그인 전/후 모두 같은 모양 */
+.icon-btn{
+  display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px;
+  color: rgba(251,249,246,.86); background:transparent; border:0; cursor:pointer; text-decoration:none;
+}
+.icon-btn:hover{ color:#FFF; }
+.icon-btn svg{ width:20px; height:20px; }
+#userStatusBtn{ position:relative; }
+#userStatusBtn::after{ content:""; position:absolute; top:7px; right:7px; width:6px; height:6px; border-radius:50%; background: var(--accent); }
+@media (max-width: 760px){ .nav{ display:none; } .topbar .wrap{ grid-template-columns: 1fr auto; } }
+@media (max-width: 760px){ .nav .link{ display:none; } }
+
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding: 13px 26px; border: 1px solid var(--ink); background: var(--ink);
+  color: var(--paper); font-size: 13px; font-weight: 500; letter-spacing: .06em;
+  text-decoration: none; cursor: pointer; border-radius: 2px;
+  transition: background .18s ease, color .18s ease, border-color .18s ease;
+}
+.btn:hover{ background: transparent; color: var(--ink); }
+.btn.line{ background: transparent; color: var(--ink); }
+.btn.line:hover{ background: var(--ink); color: var(--paper); }
+.btn.sm{ padding: 10px 18px; font-size: 12px; }
+.btn[disabled]{ background: var(--line); border-color: var(--line); color: var(--ink-3); cursor: not-allowed; }
+.btn[disabled]:hover{ background: var(--line); color: var(--ink-3); }
+
+/* 계정 패널 — 사이드바를 드롭다운으로 바꿨다. id 는 그대로 유지 */
+.account-wrap{ position: relative; }
+.account-panel{
+  display:none; position:absolute; right:0; top: calc(100% + 12px);
+  width: 264px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 2px; padding: var(--s3); z-index: 50;
+}
+.account-panel .label{ font-size:10px; letter-spacing:.18em; text-transform:uppercase; color: var(--ink-3); }
+.account-panel .who{ font-size:17px; font-weight:700; margin: 6px 0 var(--s2); padding-bottom: var(--s2); border-bottom:1px solid var(--line); }
+.account-panel ul{ list-style:none; margin:0 0 var(--s2); padding:0; }
+.account-panel li{ font-size:13px; color: var(--ink-2); padding: 10px 0; border-bottom:1px solid var(--paper-2); cursor:pointer; }
+.account-panel li:hover{ color: var(--ink); }
+.account-panel .out{
+  width:100%; padding:10px; background:transparent; border:1px solid var(--line);
+  border-radius:2px; font-size:12px; color: var(--ink-3); cursor:pointer; letter-spacing:.04em;
+}
+.account-panel .out:hover{ border-color: var(--ink); color: var(--ink); }
+
+/* ══════════════════════════════════════════════
+   히어로
+   ══════════════════════════════════════════════ */
+ /* 히어로 — 밝은 배경, 왼쪽 문구 / 오른쪽 로고 마크 */
+.hero{
+  position: relative; overflow:hidden;
+  background: linear-gradient(90deg, #FFFFFF 0%, var(--paper) 55%, var(--paper-2) 100%);
+  border-bottom: 1px solid var(--line);
+}
+.hero .wrap{
+  display:grid; grid-template-columns: 1.05fr 1fr; align-items:center; gap: var(--s5);
+  min-height: clamp(460px, 72vh, 680px); padding-top: var(--s6); padding-bottom: var(--s6);
+}
+.hero .eyebrow{ font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; letter-spacing:.16em; color: var(--ink-2); }
+.hero .eyebrow .yr{ margin-left: var(--s2); }
+.hero .display{ color: var(--ink); font-weight:400; font-size: clamp(44px, 6.4vw, 88px); line-height: .98; margin: var(--s3) 0; }
+.hero .display em{ font-style: italic; }
+.hero .lede{ color: var(--ink-2); margin: 0 0 var(--s5); max-width: 30ch; font-size: 15px; line-height: 1.7; }
+.hero .btn.line{ border-color: var(--ink-2); }
+.hero .btn .arr{ font-family: var(--serif); font-size: 16px; line-height: 1; margin-left: var(--s2); }
+.hero .mark{ justify-self:center; width: min(100%, 420px); }
+.hero .mark img{ width:100%; height:auto; filter: drop-shadow(0 0 22px rgba(138,115,85,.18)); }
+@media (max-width: 900px){
+  .hero .wrap{ grid-template-columns: 1fr; min-height: 0; padding-top: var(--s5); padding-bottom: var(--s6); }
+  .hero .mark{ order:-1; width: 56%; max-width: 260px; }
+}
+
+/* ══════════════════════════════════════════════
+   섹션 공통
+   ══════════════════════════════════════════════ */
+section.band{ padding: var(--s8) 0; }
+section.band.tight{ padding: var(--s7) 0; }
+section.band.alt{ background: var(--paper-2); }
+section.band.paper{ background: var(--surface); }
+
+.split{ display:grid; grid-template-columns: 1fr 1fr; gap: var(--s7); align-items:center; }
+.split.narrow{ gap: var(--s6); }
+@media (max-width: 900px){ .split{ grid-template-columns: 1fr; gap: var(--s5); } }
+
+/* ══════════════════════════════════════════════
+   업로드
+   ══════════════════════════════════════════════ */
+#upload{ scroll-margin-top: 68px; }
+
+.upload-box{
+  border: 1px solid var(--line-2); background: var(--surface);
+  padding: var(--s5) var(--s4); text-align: center; cursor: pointer;
+  transition: border-color .2s ease, background .2s ease;
+  min-height: 340px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+}
+.upload-box:hover{ border-color: var(--ink); }
+.upload-box.dragover{ border-color: var(--ink); background: var(--paper-2); }
+.upload-box input[type=file]{ display:none; }
+.upload-box .mark{ margin-bottom: var(--s3); color: var(--ink-3); }
+.upload-box .t, .upload-box .s{ display:block; }
+.upload-box .t{ font-size: 16px; font-weight: 700; letter-spacing:-.01em; }
+.upload-box .s{ font-size: 13px; color: var(--ink-3); margin-top: 6px; line-height:1.6; }
+
+.upload-box.file-selected{
+  border-color: var(--ink); justify-content: flex-start; text-align: left;
+  padding: var(--s4); height: auto;
+}
+/* 미리보기는 잘라내지 않고 사진 전체를 담는다(contain).
+   cover 로 두면 세로 사진의 정수리·턱이 잘려, 사용자가 '얼굴이 다 들어갔는지'를 확인할 수 없다. */
+#userPreview{
+  width: 100%; height: 360px; object-fit: contain;
+  background: var(--paper-2); border: 1px solid var(--line);
+}
+.preview-hint{ display:block; font-size: 12px; color: var(--ink-3); margin: 8px 0 var(--s3); text-align:center; }
+
+/* 파일 선택 후 펼쳐지는 옵션 */
+.option-form-area{ display:none; width:100%; }
+.field{ margin-bottom: var(--s3); }
+.field > label{
+  display:block; font-size: 10px; letter-spacing:.16em; text-transform:uppercase;
+  color: var(--ink-3); margin-bottom: 8px;
+}
+.field select, .field textarea{
+  width:100%; padding: 12px 14px; border:1px solid var(--line-2); background: var(--surface);
+  border-radius: 2px; font-family: inherit; font-size: 14px; color: var(--ink);
+}
+.field select:focus, .field textarea:focus{ outline:none; border-color: var(--ink); }
+.field textarea{ height: 72px; resize: none; }
+
+/* 보관 여부는 동의서의 '중요한 내용'이다(보유·이용 기간).
+   흐리게 두지 않고, 핵심 구절은 굵기·색으로 구분한다. */
+.consent-note{
+  border-left: 2px solid var(--accent); padding: 2px 0 2px 14px;
+  font-size: 13px; color: var(--ink-2); line-height:1.65; margin-bottom: var(--s2);
+}
+.consent-note b, .privacy-key{ color: var(--ink); font-weight: 700; }
+.consent-check{
+  display:flex; align-items:flex-start; gap:10px; font-size:13px;
+  color: var(--ink-2); cursor:pointer; margin-bottom: var(--s3);
+}
+.consent-check input{ margin-top:4px; flex:none; accent-color: var(--ink); }
+
+/* ══════════════════════════════════════════════
+   Before / After — 어긋난 2컬럼
+   ══════════════════════════════════════════════ */
+.ba-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: var(--s4); align-items:start; }
+.ba-grid .col-b{ margin-top: var(--s7); }
+@media (max-width: 900px){ .ba-grid{ grid-template-columns:1fr; } .ba-grid .col-b{ margin-top:0; } }
+.ba-grid .fig{ aspect-ratio: 4/5; }
+.ba-cap{
+  display:flex; justify-content:space-between; align-items:baseline;
+  margin-top: var(--s2); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color: var(--ink-3);
+}
+.ba-cap b{ font-family: var(--serif); font-size: 17px; letter-spacing:.06em; font-weight:400; color: var(--ink); text-transform:none; }
+
+/* ══════════════════════════════════════════════
+   3 스텝 — 좌우 교차
+   ══════════════════════════════════════════════ */
+.step + .step{ margin-top: var(--s8); }
+.step .fig{ aspect-ratio: 5/4; }
+.step:nth-child(even) .txt{ order: 2; }
+@media (max-width: 900px){ .step:nth-child(even) .txt{ order: 0; } }
+.step-no{
+  font-family: var(--serif); font-size: 52px; font-weight:300;
+  color: var(--line-2); line-height:1; margin-bottom: var(--s2);
+}
+
+/* ══════════════════════════════════════════════
+   스타일 그리드
+   ══════════════════════════════════════════════ */
+.style-grid{ display:grid; grid-template-columns: repeat(5,1fr); gap: 2px; }
+@media (max-width: 900px){ .style-grid{ grid-template-columns: repeat(3,1fr); } }
+@media (max-width: 560px){ .style-grid{ grid-template-columns: repeat(2,1fr); } }
+.style-group + .style-group{ margin-top: var(--s6); }
+.style-group-head{
+  display:flex; align-items:baseline; gap: var(--s2);
+  padding-bottom: var(--s2); margin-bottom: var(--s3); border-bottom:1px solid var(--ink);
+}
+.style-group-head .en{ font-family: var(--serif); font-size: 26px; font-weight: 400; }
+.style-group-head .ko{ font-size: 13px; color: var(--ink-3); }
+/* 원본이 1:1 정렬본이라 정사각형으로 둔다. 3:4 로 자르면 긴 머리·펌의 옆 볼륨이 잘린다 */
+.style-cell .fig{ aspect-ratio: 1/1; }
+.style-cell .meta{ padding: var(--s2) 0 0; }
+.style-cell .en{ font-size:11px; letter-spacing:.16em; text-transform:uppercase; color: var(--ink-3); }
+.style-cell .ko{ font-size:14px; font-weight:500; margin-top:2px; }
+
+/* ══════════════════════════════════════════════
+   FAQ
+   ══════════════════════════════════════════════ */
+.faq{ border-top: 1px solid var(--line); }
+.faq details{ border-bottom: 1px solid var(--line); }
+.faq summary{
+  list-style:none; cursor:pointer; padding: var(--s3) 0;
+  display:flex; justify-content:space-between; align-items:center; gap: var(--s3);
+  font-size: 15px; font-weight: 500; letter-spacing:-.01em;
+}
+.faq summary::-webkit-details-marker{ display:none; }
+.faq summary::after{ content:'+'; font-family: var(--serif); font-size: 22px; color: var(--ink-3); flex:none; }
+.faq details[open] summary::after{ content:'–'; }
+.faq .ans{ padding: 0 0 var(--s3); color: var(--ink-2); font-size:14px; max-width: 64ch; }
+
+/* ══════════════════════════════════════════════
+   푸터
+   ══════════════════════════════════════════════ */
+footer{ background: var(--dark); color: rgba(255,255,255,.72); padding: var(--s7) 0 var(--s4); }
+footer .grid{ display:grid; grid-template-columns: 1.4fr 1fr 1fr; gap: var(--s5); }
+@media (max-width: 760px){ footer .grid{ grid-template-columns:1fr; gap: var(--s4); } }
+footer .wordmark{ color:#FFF; }
+footer .label{ font-size:10px; letter-spacing:.18em; text-transform:uppercase; color: rgba(255,255,255,.44); margin-bottom: var(--s1); }
+footer p{ margin: 0 0 6px; font-size: 13px; }
+footer .bottom{
+  margin-top: var(--s6); padding-top: var(--s3); border-top:1px solid rgba(255,255,255,.12);
+  font-size: 11px; color: rgba(255,255,255,.4); display:flex; justify-content:space-between; gap: var(--s3); flex-wrap:wrap;
+}
+
+/* 진행 오버레이 */
+#overlay{
+  position: fixed; inset:0; z-index: 90; display:none;
+  align-items:center; justify-content:center; flex-direction:column; gap: var(--s2);
+  background: rgba(251,249,246,.96);
+}
+#overlay.on{ display:flex; }
+.spin{ width:34px; height:34px; border:1px solid var(--line-2); border-top-color: var(--ink); border-radius:50%; animation: spin .9s linear infinite; }
+@keyframes spin{ to{ transform: rotate(360deg); } }
+#overlay p{ font-size:13px; letter-spacing:.04em; color: var(--ink-3); margin:0; }
+</style>
+</head>
+<body>
+
+<div id="overlay"><div class="spin"></div><p id="overlayText">얼굴형을 분석하는 중입니다</p></div>
+
+<!-- ══════════════ 상단바 ══════════════ -->
+<header class="topbar">
+  <div class="wrap">
+    <a href="#" class="wordmark">HAIRMATCH</a>
+    <nav class="nav">
+      <a class="link" href="#upload">시작하기</a>
+      <a class="link" href="#how">이용 방법</a>
+      <a class="link" href="#styles">스타일</a>
+      <a class="link" href="#faq">FAQ</a>
+    </nav>
+    <div class="account-wrap">
+      <!-- 로그인 전: 아이콘 → login.html / 로그인 후: 같은 아이콘 + 점, 누르면 계정 드롭다운. JS 가 참조하는 id 유지 -->
+      <a href="login.html" id="guestBtn" class="icon-btn" aria-label="로그인" title="로그인">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+      </a>
+      <div id="userStatusBtn" class="icon-btn" style="display:none" role="button" aria-label="내 계정" title="내 계정">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+      </div>
+
+      <div class="account-panel" id="sidebarRight">
+        <div class="label">Account</div>
+        <div class="who" id="userNameSlot">사용자 명</div>
+        <ul>
+          <li>계정 정보</li>
+          <li>분석 기록</li>
+          <li>저장한 스타일</li>
+          <li>보안 설정</li>
+        </ul>
+        <button class="out" onclick="fireLogout()">로그아웃</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ 히어로 ══════════════ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="copy">
+      <p class="eyebrow">Personal Hair Finder<span class="yr">2026</span></p>
+      <h1 class="display">A better frame<br>for <em>your face.</em></h1>
+      <p class="lede">사진 한 장으로 찾아보는 얼굴형과<br>당신만의 헤어스타일.</p>
+      <a href="#upload" class="btn line">내 얼굴형 찾아보기<span class="arr">→</span></a>
+    </div>
+    <div class="mark">
+      <img src="img/logo-mark.svg" alt="HairMatch 로고 — 옆얼굴과 흐르는 머리카락">
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 업로드 ══════════════ -->
+<section class="band paper" id="upload">
+  <div class="wrap">
+    <div class="split narrow">
+
+      <div>
+        <p class="eyebrow">Step 01 · Upload</p>
+        <h2 class="h-ko">정면 사진 한 장을 올려 주세요</h2>
+        <p class="body-ko">
+          얼굴 전체가 프레임 안에 들어오는 정면 사진일수록 분석이 정확합니다.
+          모자나 큰 액세서리는 없는 편이 좋고, 배경이 단순하면 합성 결과의 경계가 깨끗하게 나옵니다.
+        </p>
+
+        <div style="margin-top:var(--s4);border-top:1px solid var(--line);padding-top:var(--s3)">
+          <p class="eyebrow" style="margin-bottom:var(--s1)">Privacy</p>
+          <p class="body-ko muted" style="font-size:13px">
+            업로드한 사진은 얼굴형 분석과 합성에만 쓰이며 <b class="privacy-key">서버에 저장하지 않습니다.</b>
+            브라우저를 닫으면 함께 사라집니다.
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <div class="upload-box" id="uploadSlot">
+          <label for="fileInput" style="cursor:pointer;width:100%;display:block">
+            <img id="userPreview" hidden alt="업로드한 사진 미리보기">
+            <span class="preview-hint" id="previewHint" hidden>사진을 누르면 다른 사진으로 바꿀 수 있어요</span>
+            <span id="slotDefault">
+              <span class="mark" style="display:block">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="margin:0 auto">
+                  <path d="M12 16V4M12 4L7 9M12 4l5 5"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>
+                </svg>
+              </span>
+              <span class="t">사진 업로드</span>
+              <span class="s">클릭하거나 이곳으로 끌어다 놓으세요<br>JPG · PNG</span>
+            </span>
+          </label>
+          <input type="file" id="fileInput" accept="image/*">
+
+          <div class="option-form-area" id="optionFormArea" onclick="event.stopPropagation()">
+            <div class="field">
+              <label for="genderSelect">성별</label>
+              <select id="genderSelect" required>
+                <option value="female">여성</option>
+                <option value="male">남성</option>
+              </select>
+            </div>
+
+            <p class="consent-note">
+              업로드한 사진은 얼굴형 분석과 합성에만 사용되며,
+              <b>서버에 저장하지 않습니다.</b> 브라우저를 닫으면 함께 사라집니다.
+            </p>
+
+            <label class="consent-check">
+              <input type="checkbox" id="consentCheck" onchange="toggleAnalyzeBtn()">
+              <span>[필수] 사진 활용 및 초상권 사용에 동의합니다</span>
+            </label>
+          </div>
+        </div>
+
+        <button class="btn" id="analyzeBtn" onclick="requestAnalysis()" disabled
+                style="width:100%;margin-top:var(--s2)">사진을 올려 주세요</button>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ Before / After ══════════════ -->
+<section class="band alt">
+  <div class="wrap">
+    <p class="eyebrow">Before &amp; After</p>
+    <h2 class="display" style="margin-bottom:var(--s6)">See it,<br>before you cut.</h2>
+
+    <div class="ba-grid">
+      <div>
+        <figure class="fig" data-src="img/before-m.jpg">
+          <img src="img/before-m.jpg" alt="합성 전 원본 사진 (남성 예시)" onerror="this.hidden=true">
+        </figure>
+        <div class="ba-cap"><b>Before</b><span>원본</span></div>
+      </div>
+      <div class="col-b">
+        <figure class="fig" data-src="img/after-m.jpg">
+          <img src="img/after-m.jpg" alt="AI 합성 결과 (남성 예시)" onerror="this.hidden=true">
+        </figure>
+        <div class="ba-cap"><b>After</b><span>AI 합성</span></div>
+      </div>
+    </div>
+
+    <p class="body-ko" style="margin-top:var(--s5);max-width:52ch">
+      머릿속 이미지의 차이는 시술 후 아쉬움으로 이어집니다.
+      직접 눈으로 확인하고 미용실에 가면, 설명이 훨씬 쉬워집니다.
+      남성과 여성 모두 성별에 맞는 스타일로 추천합니다.
+    </p>
+  </div>
+</section>
+
+<!-- ══════════════ 4 스텝 ══════════════ -->
+<section class="band" id="how">
+  <div class="wrap">
+    <p class="eyebrow">How it works</p>
+    <h2 class="display" style="margin-bottom:var(--s7)">Four steps.</h2>
+
+    <div class="step split">
+      <div class="txt">
+        <div class="step-no">01</div>
+        <h3 class="h-ko">얼굴형을 분류합니다</h3>
+        <p class="body-ko">
+          학습된 CNN 분류 모델이 하트형·긴형·계란형·둥근형·사각형 다섯 유형 중
+          어디에 가까운지 판단합니다. 두 유형의 특징을 함께 가진 경우에는
+          그 사실까지 함께 알려 드립니다.
+        </p>
+      </div>
+      <figure class="fig" data-src="img/step-01.jpg">
+        <img src="img/step-01.jpg" alt="" onerror="this.hidden=true">
+      </figure>
+    </div>
+
+    <div class="step split">
+      <div class="txt">
+        <div class="step-no">02</div>
+        <h3 class="h-ko">내 사진에 스타일을 입힙니다</h3>
+        <p class="body-ko">
+          얼굴형에 맞춰 고른 스타일을 실제 사진에 합성합니다.
+          머리 외의 영역은 그대로 보존되고, 원래 머리색을 유지할지도 선택할 수 있습니다.
+        </p>
+      </div>
+      <figure class="fig" data-src="img/step-02.jpg">
+        <img src="img/step-02.jpg" alt="" onerror="this.hidden=true">
+      </figure>
+    </div>
+
+    <div class="step split">
+      <div class="txt">
+        <div class="step-no">03</div>
+        <h3 class="h-ko">근처 미용실로 이어 드립니다</h3>
+        <p class="body-ko">
+          마음에 드는 스타일을 정했다면, 현재 위치를 기준으로 가까운 미용실을 거리순으로 보여 드립니다.
+          얼굴형과 스타일 정보를 그대로 복사해 예약 문의에 쓸 수 있습니다.
+        </p>
+      </div>
+      <figure class="fig" data-src="img/step-03.jpg">
+        <img src="img/step-03.jpg" alt="" onerror="this.hidden=true">
+      </figure>
+    </div>
+
+    <div class="step split">
+      <div class="txt">
+        <div class="step-no">04</div>
+        <h3 class="h-ko">원하는 스타일을 직접 설명해 만듭니다</h3>
+        <p class="body-ko">
+          추천 목록에 마음에 드는 스타일이 없다면, 원하는 헤어스타일을 문장으로 적어 보세요.
+          "턱선 단발에 끝을 안쪽으로"처럼 짧게 써도 되고, 예시 문구를 눌러 시작할 수도 있습니다.
+          외부 AI를 사용하는 기능이라 계정당 2회까지 이용할 수 있습니다.
+        </p>
+      </div>
+      <figure class="fig" data-src="img/step-04.jpg">
+        <img src="img/step-04.jpg" alt="" onerror="this.hidden=true">
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 스타일 ══════════════ -->
+<section class="band alt" id="styles">
+  <div class="wrap">
+    <p class="eyebrow">Styles</p>
+    <h2 class="display" style="margin-bottom:var(--s3)">Curated,<br>not endless.</h2>
+    <p class="body-ko" style="margin-bottom:var(--s6);max-width:48ch">
+      합성 결과가 서로 확실히 구별되는 스타일만 선별해 두었습니다.
+      목록을 늘리는 대신, 얼굴형별로 순위를 다르게 제안합니다.
+    </p>
+
+    <div class="style-group">
+      <div class="style-group-head"><span class="en">Women</span><span class="ko">여성 5종</span></div>
+      <div class="style-grid">
+        <div class="style-cell">
+          <figure class="fig" data-src="img/styles/tucked_bob.jpg"><img src="img/styles/tucked_bob.jpg" alt="턱선 단발" onerror="this.hidden=true"></figure>
+          <div class="meta"><div class="en">Bob</div><div class="ko">턱선 단발</div></div>
+        </div>
+        <div class="style-cell">
+          <figure class="fig" data-src="img/styles/hush.jpg"><img src="img/styles/hush.jpg" alt="허쉬컷" onerror="this.hidden=true"></figure>
+          <div class="meta"><div class="en">Hush</div><div class="ko">허쉬컷</div></div>
+        </div>
+        <div class="style-cell">
+          <figure class="fig" data-src="img/styles/long_wave.jpg"><img src="img/styles/long_wave.jpg" alt="롱 웨이브" onerror="this.hidden=true"></figure>
+          <div class="meta"><div class="en">Long Wave</div><div class="ko">롱 웨이브</div></div>
+        </div>
+        <div class="style-cell">
+          <figure class="fig" data-src="img/styles/full_bang.jpg"><img src="img/styles/full_bang.jpg" alt="풀뱅 롱" onerror="this.hidden=true"></figure>
+          <div class="meta"><div class="en">Full Bang</div><div class="ko">풀뱅 롱</div></div>
+        </div>
+        <div class="style-cell">
+          <figure class="fig" data-src="img/styles/gh.jpg"><img src="img/styles/gh.jpg" alt="글램 펌" onerror="this.hidden=true"></figure>
+          <div class="meta"><div class="en">Glam Perm</div><div class="ko">글램 펌</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="style-group">
+      <div class="style-group-head"><span class="en">Men</span><span class="ko">남성 5종</span></div>
+      <div class="style-grid">
+        <div class="style-cell">
+          <figure class="fig" data-src="img/styles/regent.jpg"><img src="img/styles/regent.jpg" alt="리젠트" onerror="this.hidden=true"></figure>
+          <div class="meta"><div class="en">Regent</div><div class="ko">리젠트</div></div>
+        </div>
+        <div class="style-cell">
+          <figure class="fig" data-src="img/styles/dandy.jpg"><img src="img/styles/dandy.jpg" alt="댄디컷" onerror="this.hidden=true"></figure>
+          <div class="meta"><div class="en">Dandy Cut</div><div class="ko">댄디컷</div></div>
+        </div>
+        <div class="style-cell">
+          <figure class="fig" data-src="img/styles/asperm.jpg"><img src="img/styles/asperm.jpg" alt="애즈펌" onerror="this.hidden=true"></figure>
+          <div class="meta"><div class="en">As Perm</div><div class="ko">애즈펌</div></div>
+        </div>
+        <div class="style-cell">
+          <figure class="fig" data-src="img/styles/leaf.jpg"><img src="img/styles/leaf.jpg" alt="리프컷" onerror="this.hidden=true"></figure>
+          <div class="meta"><div class="en">Leaf Cut</div><div class="ko">리프컷</div></div>
+        </div>
+        <div class="style-cell">
+          <figure class="fig" data-src="img/styles/hippie.jpg"><img src="img/styles/hippie.jpg" alt="히피펌" onerror="this.hidden=true"></figure>
+          <div class="meta"><div class="en">Hippie Perm</div><div class="ko">히피펌</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ FAQ ══════════════ -->
+<section class="band tight paper" id="faq">
+  <div class="wrap">
+    <div class="split narrow" style="align-items:start">
+      <div>
+        <p class="eyebrow">FAQ</p>
+        <h2 class="display">Questions.</h2>
+      </div>
+
+      <div class="faq">
+        <details>
+          <summary>분석과 합성에 얼마나 걸리나요?</summary>
+          <div class="ans">얼굴형 분석은 1초 안에 끝나고, 스타일 합성은 한 장당 2~3초가 걸립니다. 추천 스타일 세 가지를 모두 보는 데 약 10초 정도입니다.</div>
+        </details>
+        <details>
+          <summary>제 사진은 어디에 저장되나요?</summary>
+          <div class="ans">저장하지 않습니다. 업로드한 사진은 분석과 합성에만 쓰이고 서버 디스크에 기록되지 않으며, 브라우저를 닫으면 함께 사라집니다. 로그인하면 합성 결과만 계정에 남겨 다시 볼 수 있습니다.</div>
+        </details>
+        <details>
+          <summary>얼굴형은 어떻게 판단하나요?</summary>
+          <div class="ans">얼굴형 데이터로 학습한 CNN 분류 모델이 다섯 유형 중 가장 가까운 쪽을 고릅니다. 1순위와 2순위의 확률 차이가 작으면 두 유형의 특징을 함께 가진 것으로 보고 양쪽 추천을 모두 보여 드립니다.</div>
+        </details>
+        <details>
+          <summary>스타일이 왜 이것뿐인가요?</summary>
+          <div class="ans">합성 결과가 서로 구별되는지 기준으로 걸러 낸 결과입니다. 겉보기에 다른 스타일이라도 실제 합성하면 거의 같게 나오는 경우가 있어, 목록만 늘리고 결과는 같아지는 상황을 피했습니다. 원하는 스타일이 없다면 직접 설명해서 만들어 보는 기능을 따로 두었습니다.</div>
+        </details>
+        <details>
+          <summary>남성도 쓸 수 있나요?</summary>
+          <div class="ans">네. 성별을 선택하면 그에 맞는 스타일 목록으로 추천이 바뀝니다.</div>
+        </details>
+        <details>
+          <summary>이용료가 있나요?</summary>
+          <div class="ans">얼굴형 분석과 추천 스타일 합성은 제한 없이 무료입니다. 프롬프트로 직접 만드는 기능만 외부 AI를 사용해 계정당 2회로 제한됩니다.</div>
+        </details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════ 푸터 ══════════════ -->
+<footer>
+  <div class="wrap">
+    <div class="grid">
+      <div>
+        <a href="#" class="wordmark">HAIRMATCH<small style="color:rgba(255,255,255,.4)">FACE SHAPE ANALYSIS</small></a>
+        <p style="margin-top:var(--s2);max-width:34ch;color:rgba(255,255,255,.56)">
+          얼굴형 분석부터 헤어 합성, 미용실 추천까지 하나의 흐름으로 잇는 졸업 작품입니다.
+        </p>
+      </div>
+      <div>
+        <div class="label">Project</div>
+        <p>서일대학교 소프트웨어공학과</p>
+        <p>졸업 작품 · 2026</p>
+      </div>
+      <div>
+        <div class="label">Stack</div>
+        <p>FastAPI · PostgreSQL</p>
+        <p>CNN 분류 · StyleGAN 기반 합성</p>
+      </div>
+    </div>
+    <div class="bottom">
+      <span>© 2026 HAIRMATCH</span>
+      <span>합성 결과는 참고용이며 실제 시술 결과와 다를 수 있습니다</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   기능 — 이름과 동작은 기존과 동일하게 유지했다
+   ═══════════════════════════════════════════════════════ */
+const BACKEND_URL = "";   // ★ 같은 서버(web_main)가 화면과 API 를 함께 제공하므로 비워 둔다
+let selectedFile = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (localStorage.getItem("isLoggedIn") === "true" && localStorage.getItem("userName")) {
+    document.getElementById("guestBtn").style.display = "none";
+    document.getElementById("userStatusBtn").style.display = "inline-flex";
+    document.getElementById("userNameSlot").innerText = localStorage.getItem("userName") + " 님";
+  }
+});
+
+/* 계정 패널 토글 */
+document.getElementById("userStatusBtn").addEventListener("click", e => {
+  e.stopPropagation();
+  const p = document.getElementById("sidebarRight");
+  p.style.display = p.style.display === "block" ? "none" : "block";
+});
+document.addEventListener("click", () => {
+  const p = document.getElementById("sidebarRight");
+  if (p) p.style.display = "none";
+});
+document.getElementById("sidebarRight").addEventListener("click", e => e.stopPropagation());
+
+function fireLogout() {
+  localStorage.removeItem("isLoggedIn");
+  localStorage.removeItem("userName");
+  location.reload();
+}
+
+/* 파일 선택 */
+const fileInput = document.getElementById("fileInput");
+fileInput.onchange = () => {
+  const [file] = fileInput.files;
+  if (file) handleFileSelection(file);
+};
+
+/* 드래그 앤 드롭 */
+const uploadSlot = document.getElementById("uploadSlot");
+uploadSlot.addEventListener("dragover", e => { e.preventDefault(); uploadSlot.classList.add("dragover"); });
+uploadSlot.addEventListener("dragleave", () => uploadSlot.classList.remove("dragover"));
+uploadSlot.addEventListener("drop", e => {
+  e.preventDefault();
+  uploadSlot.classList.remove("dragover");
+  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+    fileInput.files = e.dataTransfer.files;
+    handleFileSelection(e.dataTransfer.files[0]);
+  }
+});
+
+function handleFileSelection(file) {
+  selectedFile = file;
+  const prev = document.getElementById("userPreview");
+  prev.src = URL.createObjectURL(file);
+  prev.hidden = false;
+  document.getElementById("previewHint").hidden = false;
+  document.getElementById("slotDefault").style.display = "none";
+  uploadSlot.classList.add("file-selected");
+  document.getElementById("optionFormArea").style.display = "block";
+  toggleAnalyzeBtn();
+}
+
+function toggleAnalyzeBtn() {
+  const checked = document.getElementById("consentCheck").checked;
+  const btn = document.getElementById("analyzeBtn");
+  if (!selectedFile) {
+    btn.innerText = "사진을 올려 주세요"; btn.disabled = true;
+  } else if (!checked) {
+    btn.innerText = "동의 후 분석할 수 있습니다"; btn.disabled = true;
+  } else {
+    btn.innerText = "얼굴형 분석 시작"; btn.disabled = false;
+  }
+}
+
+/* ★ 다음 페이지로 사진을 넘긴다.
+     File 객체는 localStorage 에 넣을 수 없어서, 축소한 뒤 dataURL 로 바꿔
+     sessionStorage 에 담는다. 탭을 닫으면 사라지므로
+     "저장하지 않는다"는 안내와도 어긋나지 않는다.
+     이 함수가 없으면 a.html 에 합성할 사진이 없다. */
+async function savePhotoForNextPage(file) {
+  const img = await createImageBitmap(file);
+  const max = 1600;                                  // 원본이 클수록 합성이 선명하다
+  const r = Math.min(1, max / Math.max(img.width, img.height));
+  const c = document.createElement("canvas");
+  c.width  = Math.round(img.width  * r);
+  c.height = Math.round(img.height * r);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  const dataUrl = c.toDataURL("image/jpeg", 0.9);    // 보통 300KB 안팎
+  try {
+    sessionStorage.setItem("hm_photo", dataUrl);
+  } catch (e) {
+    alert("사진 용량이 너무 큽니다. 다른 사진으로 시도해 주세요.");
+    throw e;
+  }
+}
+
+async function requestAnalysis() {
+  if (!selectedFile) return alert("사진을 올려 주세요.");
+  if (!document.getElementById("consentCheck").checked) return alert("사진 활용 동의가 필요합니다.");
+
+  const fd = new FormData();
+  fd.append("file", selectedFile);
+  fd.append("gender", document.getElementById("genderSelect").value);
+  fd.append("consent", "true");
+
+  const overlay = document.getElementById("overlay");
+  overlay.classList.add("on");
+
+  // 단계별 안내 — 실제 진행률이 아니라 시간 기반이다. 멈춘 느낌을 줄이는 용도.
+  const stages = ["사진을 확인하고 있습니다", "얼굴형을 분석하고 있습니다", "어울리는 스타일을 준비하고 있습니다"];
+  let stage = 0;
+  const overlayText = document.getElementById("overlayText");
+  overlayText.textContent = stages[0];
+  const stageTimer = setInterval(() => {
+    stage = Math.min(stage + 1, stages.length - 1);
+    overlayText.textContent = stages[stage];
+  }, 1600);
+
+  try {
+    const res  = await fetch(`${BACKEND_URL}/analyze`, { method: "POST", body: fd });
+    const data = await res.json();
+
+    clearInterval(stageTimer);
+    if (data.status === "success" || data.face_shape) {
+      localStorage.setItem("analyzeResult", JSON.stringify(data));
+      await savePhotoForNextPage(selectedFile);      // ★ 사진도 함께 넘긴다
+      window.location.href = "a.html";
+    } else {
+      overlay.classList.remove("on");
+      alert(data.message || "얼굴을 인식하지 못했습니다. 정면 사진으로 다시 시도해 주세요.");
+      toggleAnalyzeBtn();
+    }
+  } catch (err) {
+    clearInterval(stageTimer);
+    overlay.classList.remove("on");
+    alert("서버에 연결하지 못했습니다. 백엔드(FastAPI) 상태를 확인해 주세요.");
+    console.error(err);
+    toggleAnalyzeBtn();
+  }
+}
+</script>
+</body>
+</html>

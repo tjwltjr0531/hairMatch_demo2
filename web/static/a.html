@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HAIRMATCH — 분석 결과</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" as="style" crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<!--
+  a.html — 화면 3(합성 결과 + 미용실) + 화면 4(프롬프트 자유 생성)
+  index.html 과 같은 토큰(무채색 + 웜 베이지, 영문 세리프, 각진 모서리)으로 맞췄다.
+  기능과 id 는 이전 버전과 동일하다.
+
+  사진은 index.html 이 sessionStorage('hm_photo') 에 넣어 넘긴다.
+  3과 4를 한 파일에 둔 이유: 또 나누면 그 사이에서 사진이 한 번 더 날아간다.
+-->
+<style>
+/* ══════════════════════════════════════════════
+   토큰 — index.html 과 동일
+   ══════════════════════════════════════════════ */
+:root{
+  --ink:#16130F; --ink-2:#3D362D; --ink-3:#7A7168;
+  --line:#E4DED4; --line-2:#CFC6B9;
+  --paper:#FBF9F6; --paper-2:#F3EEE7; --surface:#FFFFFF;
+  --accent:#8A7355; --dark:#16130F;
+  --danger:#9A3B2E; --danger-bg:#F8EEEA; --danger-line:#E6CFC7;
+
+  --s1:8px; --s2:16px; --s3:24px; --s4:32px; --s5:48px; --s6:64px; --s7:96px; --s8:128px;
+
+  --serif:'Cormorant Garamond', Georgia, serif;
+  --sans:'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+*{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:var(--sans); font-size:15px; line-height:1.75;
+  -webkit-font-smoothing:antialiased; overflow-x:hidden;
+}
+img{ display:block; max-width:100%; }
+button{ font-family:inherit; }
+[hidden]{ display:none !important; }
+/* 사진이 아직 없을 때 깨진 이미지 아이콘이 보이지 않게 */
+img:not([src]), img[src=""]{ visibility:hidden; }
+
+.wrap{ max-width:1240px; margin:0 auto; padding:0 var(--s4); }
+@media (max-width:640px){ .wrap{ padding:0 var(--s2); } }
+
+.eyebrow{ font-size:11px; font-weight:500; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-3); margin:0 0 var(--s2); }
+.display{ font-family:var(--serif); font-weight:300; font-size:clamp(36px,5vw,64px); line-height:1.06; letter-spacing:-.01em; margin:0; }
+.h-ko{ font-size:clamp(20px,2.2vw,28px); font-weight:700; line-height:1.5; letter-spacing:-.02em; margin:0 0 var(--s2); }
+.body-ko{ color:var(--ink-2); margin:0; max-width:48ch; }
+.muted{ color:var(--ink-3); }
+
+section.band{ padding:var(--s7) 0; }
+section.band.alt{ background:var(--paper-2); }
+section.band.paper{ background:var(--surface); }
+.sec-head{ display:flex; justify-content:space-between; align-items:flex-end; gap:var(--s4); flex-wrap:wrap; margin-bottom:var(--s5); }
+.sec-head .body-ko{ max-width:40ch; }
+
+/* ── 버튼 ── */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:13px 26px; border:1px solid var(--ink); background:var(--ink); color:var(--paper);
+  font-size:13px; font-weight:500; letter-spacing:.06em; text-decoration:none;
+  cursor:pointer; border-radius:2px; transition:background .18s, color .18s, border-color .18s;
+}
+.btn:hover{ background:transparent; color:var(--ink); }
+.btn.line{ background:transparent; color:var(--ink); }
+.btn.line:hover{ background:var(--ink); color:var(--paper); }
+.btn.sm{ padding:10px 18px; font-size:12px; }
+.btn.block{ width:100%; }
+.btn[disabled]{ background:var(--line); border-color:var(--line); color:var(--ink-3); cursor:not-allowed; }
+.btn[disabled]:hover{ background:var(--line); color:var(--ink-3); }
+.btn-ghost{
+  display:block; margin:var(--s5) auto 0; padding:12px 28px;
+  background:transparent; border:1px solid var(--line-2); border-radius:2px;
+  color:var(--ink-2); font-size:13px; letter-spacing:.04em; cursor:pointer; transition:border-color .18s, color .18s;
+}
+.btn-ghost:hover{ border-color:var(--ink); color:var(--ink); }
+.btn-ghost[disabled]{ opacity:.5; cursor:default; }
+
+/* ══════════════════════════════════════════════
+   상단바 — index.html 과 동일
+   ══════════════════════════════════════════════ */
+.topbar{ position:sticky; top:0; z-index:40; background:rgba(251,249,246,.88); backdrop-filter:blur(12px); border-bottom:1px solid var(--line); }
+.topbar .wrap{ display:flex; align-items:center; justify-content:space-between; height:68px; }
+.wordmark{ font-family:var(--serif); font-size:21px; font-weight:500; letter-spacing:.22em; text-decoration:none; color:var(--ink); }
+.wordmark small{ display:block; font-family:var(--sans); font-size:10px; letter-spacing:.14em; color:var(--ink-3); margin-top:-2px; }
+.nav{ display:flex; align-items:center; gap:var(--s3); }
+.nav a.link{ font-size:13px; color:var(--ink-2); text-decoration:none; }
+.nav a.link:hover{ color:var(--ink); }
+@media (max-width:640px){ .nav .link{ display:none; } }
+
+.account-wrap{ position:relative; }
+.account-panel{ display:none; position:absolute; right:0; top:calc(100% + 12px); width:264px; background:var(--surface); border:1px solid var(--line); border-radius:2px; padding:var(--s3); z-index:50; }
+.account-panel .label{ font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-3); }
+.account-panel .who{ font-size:17px; font-weight:700; margin:6px 0 var(--s2); padding-bottom:var(--s2); border-bottom:1px solid var(--line); }
+.account-panel ul{ list-style:none; margin:0 0 var(--s2); padding:0; }
+.account-panel li{ font-size:13px; color:var(--ink-2); padding:10px 0; border-bottom:1px solid var(--paper-2); cursor:pointer; }
+.account-panel li:hover{ color:var(--ink); }
+.account-panel .out{ width:100%; padding:10px; background:transparent; border:1px solid var(--line); border-radius:2px; font-size:12px; color:var(--ink-3); cursor:pointer; }
+.account-panel .out:hover{ border-color:var(--ink); color:var(--ink); }
+
+/* ── 화면 전환 ── */
+.screen{ display:none; }
+.screen.active{ display:block; }
+
+/* ══════════════════════════════════════════════
+   얼굴형 결과
+   ══════════════════════════════════════════════ */
+.result-head{ padding:var(--s7) 0 var(--s6); border-bottom:1px solid var(--line); }
+.result-head .grid{ display:grid; grid-template-columns:1.3fr 1fr; gap:var(--s6); align-items:end; }
+@media (max-width:900px){ .result-head .grid{ grid-template-columns:1fr; gap:var(--s4); } }
+.result-head .display em{ font-style:italic; }
+.meters{ display:grid; grid-template-columns:1fr 1fr; border-top:1px solid var(--ink); }
+.meter{ padding:var(--s2) 0 0; }
+.meter + .meter{ border-left:1px solid var(--line); padding-left:var(--s3); }
+.meter .lbl{ font-size:10px; letter-spacing:.18em; text-transform:uppercase; color:var(--ink-3); }
+.meter .val{ font-family:var(--serif); font-size:40px; font-weight:300; line-height:1.2; margin-top:4px; }
+/* 상위 2개 얼굴형 — 확률 막대. 두 칸(meter) 아래 한 줄 전체를 쓴다 */
+.top2{ grid-column:1 / -1; margin-top:var(--s2); padding-top:var(--s2); border-top:1px solid var(--line); display:grid; gap:10px; }
+.top2 .row{ display:grid; grid-template-columns:72px 1fr 44px; align-items:center; gap:12px; font-size:13px; color:var(--ink-2); }
+.top2 .bar{ height:4px; background:var(--line); position:relative; }
+.top2 .bar i{ position:absolute; inset:0 auto 0 0; background:var(--ink); }
+.top2 .row + .row .bar i{ background:var(--accent); }
+.top2 .pct{ text-align:right; font-variant-numeric:tabular-nums; color:var(--ink); }
+.result-head .body-ko{ margin-top:var(--s3); }
+
+/* ══════════════════════════════════════════════
+   합성 결과 카드
+   ══════════════════════════════════════════════ */
+.result-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:var(--s4) var(--s3); }
+@media (max-width:900px){ .result-grid{ grid-template-columns:repeat(2,1fr); } }
+@media (max-width:560px){ .result-grid{ grid-template-columns:1fr; } }
+
+.style-card{ background:transparent; transition:opacity .2s; }
+.style-thumb{ position:relative; aspect-ratio:3/4; background:var(--paper-2); overflow:hidden; border:1px solid var(--line); }
+.style-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+.style-card.is-selected .style-thumb{ border-color:var(--ink); outline:1px solid var(--ink); outline-offset:3px; }
+.style-rank{
+  position:absolute; top:12px; left:12px; z-index:2;
+  font-size:10px; letter-spacing:.18em; color:var(--ink);
+  background:rgba(251,249,246,.9); padding:5px 10px; border-radius:1px;
+}
+.style-body{ padding:var(--s2) 0 0; }
+.style-name{ font-size:16px; font-weight:700; letter-spacing:-.01em; margin:0; }
+.style-for{ font-size:11px; letter-spacing:.04em; color:var(--accent); margin:3px 0 0; }
+.style-note{ font-size:13px; color:var(--ink-3); margin:4px 0 var(--s2); line-height:1.6; min-height:42px; }
+.btn-pick{
+  width:100%; padding:11px; background:transparent; border:1px solid var(--ink);
+  color:var(--ink); border-radius:2px; font-size:12px; font-weight:500; letter-spacing:.06em;
+  cursor:pointer; transition:background .18s, color .18s;
+}
+.btn-pick:hover:not([disabled]){ background:var(--ink); color:var(--paper); }
+.btn-pick[disabled]{ border-color:var(--line); color:var(--ink-3); cursor:default; }
+
+.skeleton{
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
+  background:linear-gradient(90deg,var(--paper-2) 25%,#F8F4EE 37%,var(--paper-2) 63%);
+  background-size:400% 100%; animation:shimmer 1.6s ease infinite;
+  font-size:12px; letter-spacing:.06em; color:var(--ink-3);
+}
+@keyframes shimmer{ 0%{background-position:100% 0} 100%{background-position:0 0} }
+.spinner{ width:26px; height:26px; border:1px solid var(--line-2); border-top-color:var(--ink); border-radius:50%; animation:spin .9s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+.failed{
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;
+  background:var(--danger-bg); color:var(--danger); font-size:13px; text-align:center; padding:var(--s2);
+}
+.failed button{ padding:8px 16px; background:transparent; border:1px solid var(--danger); border-radius:2px; color:var(--danger); font-size:12px; cursor:pointer; }
+.failed button:hover{ background:var(--danger); color:#FFF; }
+
+/* ══════════════════════════════════════════════
+   선택한 스타일 — before/after
+   ══════════════════════════════════════════════ */
+.ba-layout{ display:grid; grid-template-columns:minmax(0,420px) 1fr; gap:var(--s6); align-items:center; }
+@media (max-width:900px){ .ba-layout{ grid-template-columns:1fr; gap:var(--s4); } }
+.ba{ position:relative; width:100%; max-width:420px; margin:0 auto; overflow:hidden; background:var(--paper-2); border:1px solid var(--line); }
+.ba img{ width:100%; display:block; }
+.ba .before{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; clip-path:inset(0 50% 0 0); }
+.ba .lbl{ position:absolute; bottom:12px; font-size:10px; letter-spacing:.18em; color:var(--ink); background:rgba(251,249,246,.9); padding:5px 10px; }
+.ba .lbl.l{ left:12px } .ba .lbl.r{ right:12px }
+input[type=range]{ display:block; width:100%; max-width:420px; margin:var(--s2) auto 0; accent-color:var(--ink); }
+
+.switch-row{ display:flex; align-items:center; gap:10px; margin-top:var(--s3); font-size:14px; color:var(--ink-2); cursor:pointer; }
+.switch-row input{ accent-color:var(--ink); }
+.btn-row{ display:flex; gap:var(--s1); flex-wrap:wrap; margin-top:var(--s4); }
+
+/* ══════════════════════════════════════════════
+   미용실
+   ══════════════════════════════════════════════ */
+.salon-layout{ display:grid; grid-template-columns:1fr 1fr; gap:var(--s4); align-items:start; }
+@media (max-width:900px){ .salon-layout{ grid-template-columns:1fr; } }
+#map{ width:100%; aspect-ratio:1/1; max-height:460px; background:var(--paper-2); border:1px solid var(--line); overflow:hidden; }
+#map .ph{ height:100%; display:flex; align-items:center; justify-content:center; text-align:center; padding:var(--s3); font-size:12px; letter-spacing:.06em; color:var(--ink-3); border:1px dashed var(--line-2); }
+#salonList{ border-top:1px solid var(--ink); }
+.salon{
+  display:flex; justify-content:space-between; align-items:center; gap:var(--s2);
+  padding:var(--s2) 0; border-bottom:1px solid var(--line); cursor:pointer; transition:padding .18s;
+}
+.salon:hover, .salon.on{ padding-left:var(--s1); }
+.salon .nm{ font-size:15px; font-weight:700; }
+.salon .ad{ font-size:12px; color:var(--ink-3); margin-top:2px; }
+.salon .dist{ font-family:var(--serif); font-size:20px; font-weight:400; white-space:nowrap; }
+.salon .links{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+.salon .links a{
+  font-size:11px; letter-spacing:.04em; color:var(--ink-2); text-decoration:none;
+  padding:5px 10px; border:1px solid var(--line-2); border-radius:1px; transition:border-color .18s, color .18s;
+}
+.salon .links a:hover{ border-color:var(--ink); color:var(--ink); }
+.salon .links a.naver{ border-color:#03C75A; color:#03833C; }
+.salon .links a.naver:hover{ background:#03C75A; color:#FFF; }
+.map-label{
+  background:var(--ink); color:var(--paper); font-size:12px; font-weight:600;
+  padding:5px 10px; border-radius:1px; white-space:nowrap; transform:translateY(-44px);
+}
+.hint{ padding:var(--s4); border:1px dashed var(--line-2); text-align:center; color:var(--ink-2); font-size:14px; }
+select{ padding:12px 14px; border:1px solid var(--line-2); border-radius:2px; background:var(--surface); font-family:inherit; font-size:14px; color:var(--ink); }
+select:focus{ outline:none; border-color:var(--ink); }
+
+/* ══════════════════════════════════════════════
+   자유 생성 유도
+   ══════════════════════════════════════════════ */
+.cta{ display:grid; grid-template-columns:1fr auto; gap:var(--s4); align-items:center; padding:var(--s5) 0; border-top:1px solid var(--ink); border-bottom:1px solid var(--line); }
+@media (max-width:760px){ .cta{ grid-template-columns:1fr; } }
+.cta .quota{ font-size:13px; color:var(--ink-3); margin:var(--s1) 0 0; }
+.cta .quota b{ color:var(--ink); font-weight:700; }
+.cta .quota.out b{ color:var(--danger); }
+
+/* ══════════════════════════════════════════════
+   화면 4
+   ══════════════════════════════════════════════ */
+.quota-pill{ font-size:11px; letter-spacing:.12em; padding:7px 14px; border:1px solid var(--ink); border-radius:1px; white-space:nowrap; }
+.quota-pill.out{ border-color:var(--danger); color:var(--danger); }
+
+.gen-layout{ display:grid; grid-template-columns:1fr 1fr; gap:var(--s6); align-items:start; }
+@media (max-width:900px){ .gen-layout{ grid-template-columns:1fr; gap:var(--s4); } }
+
+.src-row{ display:flex; gap:var(--s2); align-items:center; padding-bottom:var(--s3); margin-bottom:var(--s3); border-bottom:1px solid var(--line); }
+.src-row img{ width:72px; height:90px; object-fit:cover; background:var(--paper-2); border:1px solid var(--line); }
+.src-row .t{ font-size:14px; font-weight:700; }
+.src-row .t b{ display:block; font-size:12px; font-weight:400; color:var(--ink-3); margin-top:2px; }
+
+.field-lbl{ display:block; font-size:10px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-3); margin-bottom:var(--s1); }
+.chips{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:var(--s3); }
+.chip{ padding:7px 13px; background:transparent; border:1px solid var(--line-2); border-radius:1px; font-size:13px; color:var(--ink-2); cursor:pointer; transition:border-color .18s, color .18s; }
+.chip:hover{ border-color:var(--ink); color:var(--ink); }
+textarea{ width:100%; min-height:110px; resize:vertical; padding:14px; border:1px solid var(--line-2); border-radius:2px; background:var(--surface); font-family:inherit; font-size:15px; color:var(--ink); }
+textarea:focus{ outline:none; border-color:var(--ink); }
+.count{ text-align:right; font-size:11px; letter-spacing:.06em; color:var(--ink-3); margin-top:6px; }
+.count.over{ color:var(--danger); }
+
+details{ margin-top:var(--s3); border-top:1px solid var(--line); padding-top:var(--s2); }
+details summary{ cursor:pointer; font-size:13px; color:var(--ink-2); list-style:none; }
+details summary::-webkit-details-marker{ display:none; }
+details summary::after{ content:' +'; color:var(--ink-3); }
+details[open] summary::after{ content:' –'; }
+details pre{ margin:var(--s2) 0 0; padding:var(--s2); background:var(--paper-2); white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.7; color:var(--ink-2); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+details pre .ins{ color:var(--ink); font-weight:700; background:#EAE2D6; }
+
+.consent-box{ display:flex; gap:10px; align-items:flex-start; margin-top:var(--s3); padding:var(--s2) 0 var(--s2) 14px; border-left:2px solid var(--accent); font-size:13px; color:var(--ink-2); cursor:pointer; }
+.consent-box input{ margin-top:4px; flex:none; accent-color:var(--ink); }
+.consent-box b{ color:var(--ink); }
+.err-box{ margin-top:var(--s2); padding:12px 14px; background:var(--danger-bg); border-left:2px solid var(--danger); color:var(--danger); font-size:13px; }
+
+.gen-empty{ border:1px dashed var(--line-2); aspect-ratio:4/5; display:flex; align-items:center; justify-content:center; text-align:center; padding:var(--s4); color:var(--ink-3); font-size:13px; }
+.gen-result{ margin-bottom:var(--s5); }
+.gen-result .pr{ font-size:12px; color:var(--ink-3); margin:0 0 var(--s2); }
+.gen-result .pr b{ color:var(--ink); font-weight:700; }
+.gen-result .skeleton{ position:relative; aspect-ratio:4/5; max-width:420px; margin:0 auto; }
+.note{ margin-top:var(--s3); font-size:12px; color:var(--ink-3); }
+
+/* ══════════════════════════════════════════════
+   푸터 — index.html 과 동일한 톤, 한 줄로 축약
+   ══════════════════════════════════════════════ */
+footer{ background:var(--dark); color:rgba(255,255,255,.5); padding:var(--s5) 0; margin-top:var(--s7); font-size:11px; }
+footer .wrap{ display:flex; justify-content:space-between; gap:var(--s3); flex-wrap:wrap; }
+footer .wordmark{ color:#FFF; font-size:16px; }
+
+.devbar{ max-width:1240px; margin:0 auto; padding:10px var(--s4); font-size:12px; color:#6B5518; background:#FBF3DC; border-bottom:1px solid #EFDFA8; }
+</style>
+</head>
+<body>
+
+<!-- 개발용. 실제 배포에서는 이 블록과 아래 '개발용' 스크립트를 지운다. -->
+<div class="devbar" id="devbar" hidden>
+  <strong>MOCK 모드 — 실제 합성이 아닌 가짜 이미지입니다.</strong> 사진 선택:
+  <input type="file" id="devFile" accept="image/*">
+</div>
+
+<!-- ══════════════ 상단바 ══════════════ -->
+<header class="topbar">
+  <div class="wrap">
+    <a href="index.html" class="wordmark">HAIRMATCH<small>FACE SHAPE ANALYSIS</small></a>
+    <nav class="nav">
+      <a class="link" href="index.html">처음으로</a>
+      <div class="account-wrap">
+        <a href="login.html" id="guestBtn" class="btn sm line">로그인</a>
+        <div id="userStatusBtn" class="btn sm line" style="display:none">내 계정</div>
+        <div class="account-panel" id="sidebarRight">
+          <div class="label">Account</div>
+          <div class="who" id="userNameSlot">사용자 명</div>
+          <ul>
+            <li>계정 정보</li>
+            <li>분석 기록</li>
+            <li>저장한 스타일</li>
+            <li>보안 설정</li>
+          </ul>
+          <button class="out" onclick="fireLogout()">로그아웃</button>
+        </div>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════
+     화면 3 — 합성 결과 + 미용실
+     ══════════════════════════════════════════════ -->
+<div id="screen3" class="screen active">
+
+  <!-- 얼굴형 결과 -->
+  <section class="result-head">
+    <div class="wrap">
+      <div class="grid">
+        <div>
+          <p class="eyebrow">Your Face Shape</p>
+          <h1 class="display" id="shapeTitle">분석 중</h1>
+          <p class="body-ko" id="shapeDesc">얼굴형에 어울리는 순서로 스타일을 대입했습니다.</p>
+        </div>
+        <div class="meters">
+          <div class="meter">
+            <div class="lbl">Face Type</div>
+            <div class="val" id="mShape">—</div>
+          </div>
+          <div class="meter">
+            <div class="lbl">Confidence</div>
+            <div class="val" id="mConf">—</div>
+          </div>
+          <div class="top2" id="mTop2" hidden></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 합성 결과 -->
+  <section class="band">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Virtual Try-on</p>
+          <h2 class="h-ko" style="margin:0">내 사진에 입혀 본 추천 스타일</h2>
+        </div>
+        <p class="body-ko muted" style="font-size:13px">추천 순위대로 한 장씩 완성됩니다. 마음에 드는 스타일을 고르면 크게 비교해 볼 수 있어요.</p>
+      </div>
+      <div class="result-grid" id="resultGrid"></div>
+      <button class="btn-ghost" id="btnMore">다른 스타일도 보기</button>
+    </div>
+  </section>
+
+  <!-- 선택한 스타일 -->
+  <section class="band alt" id="selectedPanel" hidden>
+    <div class="wrap">
+      <div class="ba-layout">
+        <div>
+          <div class="ba">
+            <img id="baAfter" alt="합성 결과">
+            <img id="baBefore" class="before" alt="원본">
+            <span class="lbl l">BEFORE</span>
+            <span class="lbl r">AFTER</span>
+          </div>
+          <input id="baRange" type="range" min="0" max="100" value="50" aria-label="원본과 합성 결과 비교">
+        </div>
+        <div>
+          <p class="eyebrow">Selected Style</p>
+          <h2 class="display" id="selName" style="font-family:var(--sans);font-weight:700;font-size:clamp(26px,3vw,38px);letter-spacing:-.02em">—</h2>
+          <p class="body-ko" style="margin-top:var(--s2)">
+            슬라이더를 좌우로 움직이면 원본과 합성 결과를 바로 비교할 수 있어요.
+            머리 외의 영역은 그대로 유지됩니다.
+          </p>
+          <label class="switch-row">
+            <input type="checkbox" id="keepColor" checked>
+            <span>내 머리색 유지</span>
+          </label>
+          <div class="btn-row">
+            <button class="btn" id="btnSalons">근처 미용실 찾기</button>
+            <button class="btn line" id="btnCopy">스타일 정보 복사</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 미용실 — 선택을 권장하되 막지 않는다 -->
+  <section class="band paper">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <p class="eyebrow">Nearby Salons</p>
+          <h2 class="h-ko" style="margin:0">근처 미용실</h2>
+        </div>
+      </div>
+
+      <div id="salonPre">
+        <div class="hint">
+          현재 위치를 기준으로 근처 미용실을 거리순으로 찾아드립니다.
+          <div style="margin-top:var(--s3)">
+            <button class="btn" id="btnSalonsDirect">근처 미용실 찾기</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="salonBody" hidden>
+        <p class="body-ko muted" style="font-size:13px;margin-bottom:var(--s3)" id="salonSub">위치를 확인하는 중입니다</p>
+        <div class="salon-layout">
+          <div id="map"><div class="ph">지도 영역<br>CONFIG.MAP_KEY 에 카카오 JavaScript 키를 넣으면 여기에 지도가 표시됩니다</div></div>
+          <div>
+            <div id="salonList"></div>
+            <div id="regionPicker" hidden style="margin-top:var(--s3)">
+              <p class="body-ko muted" style="font-size:13px;margin-bottom:var(--s2)">위치를 가져올 수 없어요. 지역을 직접 골라 주세요.</p>
+              <select id="regionSel">
+                <option value="">지역 선택</option>
+                <option value="37.5665,126.9780">서울 중구</option>
+                <option value="37.5172,127.0473">서울 강남구</option>
+                <option value="37.5502,126.9245">서울 마포구</option>
+                <option value="37.4979,127.0276">서울 서초구</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 자유 생성 유도 — 맨 아래, '다른 스타일도 보기' 이후에만 나타난다 -->
+  <section class="band" id="freeformCta" hidden>
+    <div class="wrap">
+      <div class="cta">
+        <div>
+          <p class="eyebrow" style="margin-bottom:var(--s1)">Custom</p>
+          <h2 class="h-ko" style="margin:0">원하는 스타일이 없나요?</h2>
+          <p class="body-ko muted" style="font-size:14px">직접 설명하면 AI가 내 사진에 새로 만들어 드려요.</p>
+          <p class="quota" id="quotaText">확인 중</p>
+        </div>
+        <button class="btn" id="btnFreeform">프롬프트로 직접 만들기</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     화면 4 — 프롬프트 자유 생성
+     ══════════════════════════════════════════════ -->
+<div id="screen4" class="screen">
+  <section class="result-head" style="padding-bottom:var(--s5)">
+    <div class="wrap">
+      <div class="sec-head" style="margin:0;align-items:flex-end">
+        <div>
+          <p class="eyebrow">Custom Generation</p>
+          <h1 class="display">Describe it,<br>see it.</h1>
+        </div>
+        <span class="quota-pill" id="quotaBadge">확인 중</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="band">
+    <div class="wrap">
+      <div class="gen-layout">
+
+        <!-- 입력 -->
+        <div>
+          <div class="src-row">
+            <img id="srcThumb" alt="원본 사진">
+            <div class="t">내 사진에 적용됩니다<b>얼굴형 <span id="shapeText">—</span></b></div>
+          </div>
+
+          <span class="field-lbl">예시</span>
+          <div class="chips" id="chips">
+            <button class="chip">어깨 길이 레이어드 컷</button>
+            <button class="chip">턱선 단발에 끝을 안쪽으로</button>
+            <button class="chip">굵은 웨이브 장발</button>
+            <button class="chip">짧은 커트에 옆가르마</button>
+            <button class="chip">이마를 덮는 일자 앞머리</button>
+            <button class="chip">밝은 갈색으로 염색</button>
+          </div>
+
+          <label class="field-lbl" for="prompt">원하는 스타일</label>
+          <textarea id="prompt" maxlength="120" placeholder="예) 턱선까지 오는 단발에 끝을 안쪽으로 말아 주세요"></textarea>
+          <div class="count" id="count">0 / 120</div>
+
+          <details>
+            <summary>실제로 전송되는 내용 보기</summary>
+            <pre id="preview"></pre>
+          </details>
+
+          <label class="consent-box">
+            <input type="checkbox" id="consent">
+            <span>이 기능은 사진을 <b>Google 서버로 전송</b>합니다. 동의합니다.</span>
+          </label>
+
+          <button class="btn block" id="btnGen" style="margin-top:var(--s3)" disabled>생성하기</button>
+          <div class="err-box" id="err" hidden></div>
+          <p class="note">생성한 결과는 마이페이지에 저장돼 다시 볼 수 있어요.</p>
+        </div>
+
+        <!-- 결과 -->
+        <div>
+          <span class="field-lbl">Result</span>
+          <div id="results"></div>
+          <div class="gen-empty" id="genEmpty">생성한 결과가 여기에 표시됩니다</div>
+        </div>
+      </div>
+
+      <button class="btn-ghost" id="btnBack">추천 결과로 돌아가기</button>
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span class="wordmark">HAIRMATCH</span>
+    <span>합성 결과는 참고용이며 실제 시술 결과와 다를 수 있습니다</span>
+  </div>
+</footer>
+
+<script src="config.js"></script>
+<script>
+
+/* ═══════════════════════════════════════════════════════════
+   설정
+   ═══════════════════════════════════════════════════════════ */
+const IS_FILE = location.protocol === 'file:';   // 파일로 직접 열었으면 서버가 없다
+const CONFIG = Object.assign({
+  BACKEND_URL : '',       // 비워 두면 이 페이지를 연 서버(같은 주소)로 보낸다
+  USE_MOCK    : IS_FILE,  // 추천·합성. 서버(web_main)로 열면 자동으로 실제 합성
+  SALON_MOCK  : IS_FILE,  // 미용실 목록 (카카오 REST — 서버의 KAKAO_REST_KEY)
+  GEN_MOCK    : true,     // 화면 4 Gemini — 결제 연결 전까지 true
+  MAP_KEY     : '',       // 카카오 'JavaScript 키' (REST 키 아님)
+  TOP_N       : 3,
+  RETRY       : 2,
+  RETRY_MS    : 3000,
+  MAX_LEN     : 120,
+}, window.HM_CONFIG || {});
+/* ★ 키와 스위치는 static/config.js 에 적는다. a.html 을 새 버전으로 바꿔도 그대로 남는다.
+     주소 뒤에 ?mock=1 을 붙이면 서버가 있어도 가짜 모드로 볼 수 있다. */
+if (new URLSearchParams(location.search).get('mock') === '1') {
+  CONFIG.USE_MOCK = CONFIG.SALON_MOCK = CONFIG.GEN_MOCK = true;
+}
+console.info('[HairMatch] USE_MOCK=%s SALON_MOCK=%s GEN_MOCK=%s MAP_KEY=%s',
+  CONFIG.USE_MOCK, CONFIG.SALON_MOCK, CONFIG.GEN_MOCK, CONFIG.MAP_KEY ? '설정됨' : '없음');
+
+/* 화면 3·4가 함께 쓰는 값 */
+const state = {
+  file      : null,
+  origUrl   : null,
+  gender    : 'female',
+  faceShape : null,
+  styleSlug : null,
+  keepColor : true,
+  results   : new Map(),
+  remaining : null,
+  busy      : false,
+};
+let RECOMMENDED = [];
+const SHAPE_KO = { Heart:'하트형', Oblong:'긴형', Oval:'계란형', Round:'둥근형', Square:'사각형' };
+const SHAPE_DESC = {
+  Heart : '이마가 넓고 턱이 갸름한 편이에요. 턱선에 볼륨을 주는 스타일이 잘 어울려요.',
+  Oblong: '얼굴이 세로로 길어요. 가로 볼륨을 더하는 스타일이 균형을 잡아 줘요.',
+  Oval  : '가장 균형 잡힌 얼굴형이에요. 대부분의 스타일이 잘 어울려요.',
+  Round : '부드러운 곡선형이에요. 세로선을 살리는 스타일이 얼굴을 길어 보이게 해요.',
+  Square: '턱선이 또렷해요. 부드러운 웨이브가 각진 인상을 완화해 줘요.',
+};
+const shapeKo = c => SHAPE_KO[c] || c || '—';
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const esc = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+/* ═══════════════════════════════════════════════════════════
+   화면 전환
+   ═══════════════════════════════════════════════════════════ */
+function show(n) {
+  document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+  document.getElementById('screen' + n).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (n === 4) enterScreen4();
+}
+
+/* ═══════════════════════════════════════════════════════════
+   로그인 표시 (index.html 과 동일)
+   ★ localStorage 는 화면 표시용일 뿐 인증이 아니다.
+     실제 권한(특히 화면 4의 생성 횟수)은 서버 세션이 판단한다.
+   ═══════════════════════════════════════════════════════════ */
+function paintAuth() {
+  if (localStorage.getItem('isLoggedIn') === 'true' && localStorage.getItem('userName')) {
+    document.getElementById('guestBtn').style.display = 'none';
+    document.getElementById('userStatusBtn').style.display = 'inline-flex';
+    document.getElementById('userNameSlot').innerText = localStorage.getItem('userName') + ' 님';
+  }
+}
+/* 계정 패널 — index.html 과 같은 드롭다운 */
+document.getElementById('userStatusBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  const p = document.getElementById('sidebarRight');
+  p.style.display = p.style.display === 'block' ? 'none' : 'block';
+});
+document.addEventListener('click', () => { document.getElementById('sidebarRight').style.display = 'none'; });
+document.getElementById('sidebarRight').addEventListener('click', e => e.stopPropagation());
+
+function fireLogout() {
+  localStorage.removeItem('isLoggedIn');
+  localStorage.removeItem('userName');
+  location.href = 'index.html';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   진입 — index.html 이 넘긴 결과와 사진을 복원
+   ═══════════════════════════════════════════════════════════ */
+async function boot() {
+  paintAuth();
+
+  // 1) 분석 결과
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem('analyzeResult') || 'null'); } catch (_) {}
+
+  // 2) 사진 — File 은 저장할 수 없어 dataURL 로 넘어온다
+  const dataUrl = safeGet('hm_photo');
+  if (dataUrl) {
+    const blob = await (await fetch(dataUrl)).blob();
+    state.file = new File([blob], 'upload.jpg', { type: blob.type });
+    state.origUrl = dataUrl;
+  }
+
+  if (!state.file && !CONFIG.USE_MOCK) {
+    alert('사진 정보가 없습니다. 처음부터 다시 진행해 주세요.');
+    location.href = 'index.html';
+    return;
+  }
+
+  if (CONFIG.USE_MOCK && !data) {
+    data = { face_shape:'Oval', confidence:0.62, gender:'female',
+             top2:[{code:'Oval',prob:.62},{code:'Round',prob:.54}], ambiguous:true };
+  }
+
+  data = normalizeAnalyze(data);
+  state.faceShape = data?.face_shape || 'Oval';
+  state.gender    = data?.gender || 'female';
+  paintShape(data);
+
+  RECOMMENDED = await buildRecommendList(data);
+  if (state.origUrl) document.getElementById('baBefore').src = state.origUrl;
+  if (!RECOMMENDED.length) {
+    // DB 추천이 비었거나(슬러그 불일치) 서버 오류 — 빈 화면 대신 이유를 보여 준다
+    document.getElementById('resultGrid').innerHTML =
+      '<div class="hint" style="grid-column:1/-1">이 얼굴형에 맞는 추천 스타일을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</div>';
+    document.getElementById('btnMore').hidden = true;
+    return;
+  }
+  if (RECOMMENDED.length <= CONFIG.TOP_N) document.getElementById('btnMore').textContent = '원하는 스타일이 없나요?';
+  renderCards(RECOMMENDED.slice(0, CONFIG.TOP_N));
+}
+
+function safeGet(k) { try { return sessionStorage.getItem(k); } catch (_) { return null; } }
+
+/* /analyze 응답을 한 가지 모양으로 맞춘다.
+   web_main.py 의 호환 키(face_shape, confidence, top2, ambiguous)가 없어도
+   원래 키(primary, distribution, is_ambiguous)로 채운다 — 서버 버전이 달라도 화면이 비지 않게 */
+function normalizeAnalyze(d) {
+  if (!d) return d;
+  const dist = Array.isArray(d.distribution) ? d.distribution : [];
+  const top2 = Array.isArray(d.top2) && d.top2.length
+    ? d.top2
+    : dist.slice(0, 2).map(x => ({ code: x.code, prob: x.probability }));
+  return {
+    ...d,
+    face_shape: d.face_shape || d.primary?.code || top2[0]?.code,
+    confidence: d.confidence ?? d.primary?.probability ?? top2[0]?.prob,
+    ambiguous : d.ambiguous ?? d.is_ambiguous ?? false,
+    top2,
+  };
+}
+
+function paintTop2(top2) {
+  const box = document.getElementById('mTop2');
+  if (!top2 || top2.length < 2) { box.hidden = true; return; }
+  box.innerHTML = top2.slice(0, 2).map(t => {
+    const pct = Math.round((t.prob || 0) * 100);
+    return `<div class="row"><span>${esc(shapeKo(t.code))}</span>
+      <span class="bar"><i style="width:${Math.min(100, Math.max(0, pct))}%"></i></span>
+      <span class="pct">${pct}%</span></div>`;
+  }).join('');
+  box.hidden = false;
+}
+
+function paintShape(d) {
+  document.getElementById('shapeTitle').textContent = (state.faceShape || '—') + '.';   // 영문 세리프 — 한글이 세리프로 떨어지지 않게
+  document.getElementById('mShape').textContent = shapeKo(state.faceShape);
+  document.getElementById('mConf').textContent = d?.confidence != null ? Math.round(d.confidence * 100) + '%' : '—';
+  paintTop2(d?.top2);
+
+  // ★ top-1 과 top-2 차이가 작으면(AMBIGUOUS_GAP = 0.15) 두 얼굴형을 함께 알려 준다
+  document.getElementById('shapeDesc').textContent = (d?.ambiguous && d.top2?.[1])
+    ? `${shapeKo(d.top2[1].code)}의 특징도 함께 가지고 있어, 두 유형에 어울리는 스타일을 함께 추천해 드려요.`
+    : (SHAPE_DESC[state.faceShape] || '');
+}
+
+async function fetchRecommend(shape, gender) {
+  if (CONFIG.USE_MOCK) {
+    return gender === 'male'
+      ? [{slug:'regent',name_ko:'리젠트',rank:1,advice:'이마를 드러내 시원한 인상을 줍니다'},
+         {slug:'dandy',name_ko:'댄디컷',rank:2,advice:'앞머리를 내려 부드럽고 단정한 느낌'},
+         {slug:'asperm',name_ko:'애즈펌',rank:3,advice:'적당한 볼륨으로 무난하게 어울립니다'},
+         {slug:'leaf',name_ko:'리프컷',rank:4,advice:'가벼운 레이어로 답답함을 덜어 줍니다'},
+         {slug:'hippie',name_ko:'히피펌',rank:5,advice:'옆 볼륨을 크게 살려 개성을 드러냅니다'}]
+      : [{slug:'tucked_bob',name_ko:'턱선 단발',rank:1,advice:'턱선을 따라 떨어져 얼굴을 갸름하게'},
+         {slug:'long_wave',name_ko:'롱 웨이브',rank:2,advice:'세로선을 살려 얼굴이 길어 보여요'},
+         {slug:'full_bang',name_ko:'풀뱅 롱',rank:3,advice:'이마를 덮어 세로 비율을 줄여 줍니다'},
+         {slug:'hush',name_ko:'허쉬컷',rank:4,advice:'가벼운 레이어로 얼굴을 감싸 줍니다'},
+         {slug:'gh',name_ko:'글램 펌',rank:5,advice:'옆으로 볼륨을 더해 가로 균형을 잡아 줍니다'}];
+  }
+  const res = await fetch(`${CONFIG.BACKEND_URL}/recommend?shape=${encodeURIComponent(shape)}&gender=${encodeURIComponent(gender)}`);
+  if (!res.ok) throw new Error(String(res.status));
+  const list = await res.json();
+  return Array.isArray(list) ? list.sort((a, b) => a.rank - b.rank) : [];
+}
+
+/* 얼굴형 추천 순위대로 카드 목록을 만든다.
+   - 명확하면 : 1순위 얼굴형의 추천을 rank 순서 그대로
+   - 애매하면 : 두 얼굴형의 추천을 번갈아(A1, B1, A2, B2 …) 섞고, 같은 스타일은 한 번만.
+                두 얼굴형 모두에 어울리는 스타일은 앞쪽으로 올린다.
+   화면의 RANK 는 이렇게 합친 뒤의 순서다. */
+async function buildRecommendList(d) {
+  const shapes = (d?.ambiguous && d.top2?.[1])
+    ? [d.top2[0].code, d.top2[1].code]
+    : [state.faceShape];
+
+  const lists = await Promise.all(shapes.map(sh =>
+    fetchRecommend(sh, state.gender).catch(err => { console.error('[recommend]', sh, err); return []; })
+  ));
+
+  const bySlug = new Map();
+  const maxLen = Math.max(0, ...lists.map(l => l.length));
+  for (let i = 0; i < maxLen; i++) {
+    lists.forEach((list, k) => {
+      const st = list[i];
+      if (!st) return;
+      if (bySlug.has(st.slug)) { bySlug.get(st.slug).for.push(shapes[k]); return; }
+      bySlug.set(st.slug, { ...st, for: [shapes[k]] });
+    });
+  }
+  const merged = [...bySlug.values()];
+  if (shapes.length > 1) merged.sort((a, b) => b.for.length - a.for.length);   // 두 유형 공통 먼저 (안정 정렬)
+  return merged.map((st, i) => ({
+    ...st,
+    rank: i + 1,
+    // '○○형에 추천' 표시는 두 얼굴형을 섞었을 때만. 1순위 얼굴형 → 2순위 순서로
+    for: shapes.length > 1 ? shapes.filter(sh => st.for.includes(sh)) : [],
+  }));
+}
+
+/* ═══════════════════════════════════════════════════════════
+   합성 — 카드를 먼저 깔고 순차로 채운다
+   ═══════════════════════════════════════════════════════════ */
+async function renderCards(styles, append = false) {
+  const grid = document.getElementById('resultGrid');
+  if (!append) grid.innerHTML = '';
+
+  const cards = styles.map(s => {
+    const el = document.createElement('div');
+    el.className = 'style-card';
+    el.dataset.slug = s.slug;
+    el.innerHTML = `
+      <div class="style-thumb">
+        <span class="style-rank">RANK ${s.rank}</span>
+        <div class="skeleton"><div class="spinner"></div>합성하는 중</div>
+      </div>
+      <div class="style-body">
+        <p class="style-name">${esc(s.name_ko)}</p>
+        ${s.for && s.for.length ? `<p class="style-for">${s.for.map(shapeKo).map(esc).join(' · ')}에 추천</p>` : ''}
+        <p class="style-note">${esc(s.advice || '')}</p>
+        <button class="btn-pick" disabled>생성 중…</button>
+      </div>`;
+    grid.appendChild(el);
+    return el;
+  });
+
+  // ★ 순차로. Promise.all 을 쓰면 VRAM(실측 7,210 / 8,192MB)이 터진다.
+  //   서버에도 asyncio.Semaphore(1) 을 걸어 이중으로 막는다.
+  for (let i = 0; i < styles.length; i++) await fillCard(cards[i], styles[i]);
+}
+
+async function fillCard(card, style) {
+  const thumb = card.querySelector('.style-thumb');
+  const btn   = card.querySelector('.btn-pick');
+  const rank  = thumb.querySelector('.style-rank').outerHTML;
+  thumb.innerHTML = rank + '<div class="skeleton"><div class="spinner"></div>합성하는 중</div>';
+  btn.disabled = true; btn.textContent = '생성 중…';
+
+  try {
+    const blob = await synthesize(style.slug);
+    const url  = URL.createObjectURL(blob);
+    if (state.results.has(style.slug)) URL.revokeObjectURL(state.results.get(style.slug));
+    state.results.set(style.slug, url);
+
+    thumb.innerHTML = rank + `<img src="${url}" alt="${esc(style.name_ko)} 합성 결과">`;
+    btn.disabled = false;
+    btn.textContent = '이 스타일로 정하기';
+    btn.onclick = () => selectStyle(style);
+  } catch (err) {
+    thumb.innerHTML = rank +
+      `<div class="failed"><span>${synthErrorMsg(err)}</span><button type="button">다시 시도</button></div>`;
+    thumb.querySelector('.failed button').onclick = () => fillCard(card, style);
+    btn.disabled = true; btn.textContent = '—';
+  }
+}
+
+function synthErrorMsg(err) {
+  return { NO_FACE_DETECTED:'얼굴을 찾지 못했어요',
+           MULTIPLE_FACES:'한 명만 나온 사진이 필요해요',
+           GPU_BUSY:'서버가 혼잡해요',
+           INFERENCE_DOWN:'합성 서버가 꺼져 있어요',
+           INFERENCE_TIMEOUT:'합성이 너무 오래 걸려요' }[err?.code]
+      || '합성에 실패했어요';
+}
+
+async function synthesize(slug, retry = CONFIG.RETRY) {
+  if (CONFIG.USE_MOCK) return mockSynthesize(slug);
+
+  const fd = new FormData();
+  fd.append('file', state.file);
+  fd.append('style_slug', slug);
+  fd.append('keep_color', String(state.keepColor));
+
+  const res = await fetch(`${CONFIG.BACKEND_URL}/synthesize`, { method:'POST', body:fd });
+  if (res.status === 503 && retry > 0) { await sleep(CONFIG.RETRY_MS); return synthesize(slug, retry - 1); }
+  if (!res.ok) {
+    let code = String(res.status);
+    try { code = (await res.json())?.error?.code || code; } catch (_) {}
+    const e = new Error(code); e.code = code; throw e;
+  }
+  return res.blob();
+}
+
+function selectStyle(style) {
+  state.styleSlug = style.slug;
+  document.querySelectorAll('.style-card').forEach(c =>
+    c.classList.toggle('is-selected', c.dataset.slug === style.slug));
+
+  document.getElementById('selName').textContent = style.name_ko;
+  document.getElementById('baAfter').src  = state.results.get(style.slug);
+  document.getElementById('baBefore').src = state.origUrl || '';
+
+  const panel = document.getElementById('selectedPanel');
+  panel.hidden = false;
+  panel.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+document.getElementById('baRange').addEventListener('input', e => {
+  document.getElementById('baBefore').style.clipPath = `inset(0 ${100 - e.target.value}% 0 0)`;
+});
+
+document.getElementById('keepColor').addEventListener('change', async e => {
+  state.keepColor = e.target.checked;
+  const card  = document.querySelector(`.style-card[data-slug="${state.styleSlug}"]`);
+  const style = RECOMMENDED.find(s => s.slug === state.styleSlug);
+  if (card && style) {
+    await fillCard(card, style);
+    document.getElementById('baAfter').src = state.results.get(style.slug);
+  }
+});
+
+document.getElementById('btnMore').addEventListener('click', async e => {
+  e.target.disabled = true; e.target.textContent = '불러오는 중…';
+  await renderCards(RECOMMENDED.slice(CONFIG.TOP_N), true);
+  e.target.remove();
+  await revealFreeform();
+  document.getElementById('freeformCta').scrollIntoView({ behavior:'smooth', block:'center' });
+});
+
+document.getElementById('btnCopy').addEventListener('click', async e => {
+  const style = RECOMMENDED.find(s => s.slug === state.styleSlug);
+  const text = `[HairMatch]\n얼굴형: ${shapeKo(state.faceShape)}\n원하는 스타일: ${style ? style.name_ko : '-'}\n머리색: ${state.keepColor ? '현재 색 유지' : '변경 희망'}`;
+  try { await navigator.clipboard.writeText(text); e.target.textContent = '복사됨'; }
+  catch (_) { e.target.textContent = '복사 실패'; }
+  setTimeout(() => { e.target.textContent = '스타일 정보 복사'; }, 1600);
+});
+
+/* ═══════════════════════════════════════════════════════════
+   미용실
+   ═══════════════════════════════════════════════════════════ */
+let map = null, markers = [], myMarker = null, label = null, lastSalons = [];
+document.getElementById('btnSalons').addEventListener('click', showSalons);
+document.getElementById('btnSalonsDirect').addEventListener('click', showSalons);
+
+async function showSalons() {
+  document.getElementById('salonPre').hidden = true;
+  document.getElementById('salonBody').hidden = false;
+  await initOrRelayoutMap();
+  document.getElementById('salonBody').scrollIntoView({ behavior:'smooth', block:'center' });
+  requestLocation();
+}
+
+/* ── 카카오 지도 SDK 를 필요할 때 한 번만 불러온다 ──
+   autoload=false 로 받아서 kakao.maps.load() 가 끝난 뒤에 쓴다.
+   (페이지 로드 때 미리 받으면 미용실을 안 보는 사용자도 SDK 를 내려받는다) */
+let sdkPromise = null;
+function loadKakaoSdk() {
+  if (!CONFIG.MAP_KEY) return Promise.reject(new Error('NO_KEY'));
+  if (sdkPromise) return sdkPromise;
+  sdkPromise = new Promise((resolve, reject) => {
+    const sc = document.createElement('script');
+    sc.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${CONFIG.MAP_KEY}&autoload=false`;
+    sc.onload  = () => {
+      // 도메인 미등록·키 오류면 sdk.js 자체는 200 으로 내려와도 kakao 객체가 없을 수 있다
+      if (!window.kakao || !kakao.maps) return reject(new Error('SDK_NO_KAKAO'));
+      kakao.maps.load(resolve);
+    };
+    sc.onerror = () => reject(new Error('SDK_LOAD_FAILED'));   // 대개 도메인 미등록 또는 키 오류
+    document.head.appendChild(sc);
+  });
+  return sdkPromise;
+}
+
+/* ★ 숨겨진 상태에서 만들면 컨테이너 크기가 0 이라 회색 박스가 된다.
+     보이게 된 다음에 만들고, 이미 있으면 크기만 다시 계산한다. */
+async function initOrRelayoutMap() {
+  const el = document.getElementById('map');
+  try { await loadKakaoSdk(); }
+  catch (e) {
+    // 키가 없거나 실패하면 목록만 쓴다. 원인은 콘솔과 지도 자리에 남긴다(디버깅용)
+    const why = {
+      NO_KEY: 'CONFIG.MAP_KEY 가 비어 있습니다',
+      SDK_LOAD_FAILED: 'sdk.js 를 받지 못했습니다 — 네트워크 탭에서 sdk.js 상태 코드를 확인하세요',
+      SDK_NO_KAKAO: 'sdk.js 는 받았지만 kakao 객체가 없습니다 — JavaScript 키 또는 SDK 도메인 등록을 확인하세요',
+    }[e.message] || e.message;
+    // 가장 흔한 원인: 등록한 도메인(localhost)과 다른 주소로 열었을 때
+    const hostHint = location.hostname !== 'localhost'
+      ? `<br><b>지금 주소(${location.host})가 카카오에 등록된 localhost 와 다릅니다. http://localhost:8000/ 으로 처음부터 열어 주세요.</b>`
+      : '';
+    console.error('[HairMatch map]', e.message, '-', why, '| origin =', location.origin);
+    el.innerHTML = `<div class="ph">지도를 불러오지 못했습니다<br><small>${why}${hostHint}</small></div>`;
+    sdkPromise = null;   // 설정을 고친 뒤 다시 누르면 재시도
+    return;
+  }
+  if (!map) {
+    el.innerHTML = '';
+    map = new kakao.maps.Map(el, { center: new kakao.maps.LatLng(37.5665, 126.9780), level: 5 });
+    map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+  } else {
+    map.relayout();
+  }
+}
+
+/* Geolocation 은 보안 컨텍스트에서만 동작한다.
+   localhost 는 예외지만 http://192.168.x.x 로 열면 실패한다. 발표는 localhost 로. */
+function requestLocation() {
+  if (!navigator.geolocation) return showRegionPicker('이 브라우저는 위치를 지원하지 않아요.');
+  document.getElementById('salonSub').textContent = '위치를 확인하는 중입니다';
+  navigator.geolocation.getCurrentPosition(
+    p => loadSalons(p.coords.latitude, p.coords.longitude),
+    () => showRegionPicker('위치 권한이 없어요.'),
+    { timeout: 8000 }
+  );
+}
+function showRegionPicker(msg) {
+  document.getElementById('salonSub').textContent = msg;
+  document.getElementById('regionPicker').hidden = false;
+}
+document.getElementById('regionSel').addEventListener('change', e => {
+  if (!e.target.value) return;
+  const [lat, lng] = e.target.value.split(',').map(Number);
+  document.getElementById('regionPicker').hidden = true;
+  loadSalons(lat, lng);
+});
+
+/* 네이버 지도 검색 링크 — API 가 아니라 그냥 주소라 키도, 호출 제한도 없다.
+   같은 이름의 지점이 여럿일 수 있어 '구' 단위 주소를 함께 붙인다. */
+function naverLink(s) {
+  const area = (s.road_address_name || s.address_name || '').split(' ').slice(0, 2).join(' ');
+  return `https://map.naver.com/p/search/${encodeURIComponent(`${s.place_name} ${area}`.trim())}`;
+}
+
+async function loadSalons(lat, lng) {
+  const sub = document.getElementById('salonSub'), list = document.getElementById('salonList');
+  sub.textContent = '주변 미용실을 찾는 중입니다'; list.innerHTML = '';
+
+  let salons;
+  try {
+    if (CONFIG.SALON_MOCK) {
+      salons = await mockSalons(lat, lng);
+    } else {
+      // ★ 카카오 로컬(REST) 호출은 서버가 한다. REST 키를 브라우저에 두면 누구나 가져간다.
+      const res = await fetch(`${CONFIG.BACKEND_URL}/salons?lat=${lat}&lng=${lng}&radius=3000`);
+      if (!res.ok) throw new Error(String(res.status));
+      salons = await res.json();
+    }
+  } catch (_) { sub.textContent = '미용실 정보를 불러오지 못했어요.'; return; }
+
+  lastSalons = salons;
+  if (!salons.length) { sub.textContent = '반경 3km 안에 미용실을 찾지 못했어요.'; return; }
+  // 시술 가능 스타일은 공개 API 가 주지 않는다(장소 단위 정보뿐). 거리순 목록만 보여준다.
+  sub.textContent = `주변 ${salons.length}곳 · 거리순`;
+
+  salons.forEach((s, i) => {
+    const row = document.createElement('div');
+    row.className = 'salon';
+    row.innerHTML = `
+      <div>
+        <div class="nm">${esc(s.place_name)}</div>
+        <div class="ad">${esc(s.road_address_name || s.address_name || '')}${s.phone ? ' · ' + esc(s.phone) : ''}</div>
+        <div class="links">
+          <a class="naver" href="${naverLink(s)}" target="_blank" rel="noopener">네이버에서 리뷰·예약 보기</a>
+          ${s.place_url ? `<a href="${esc(s.place_url)}" target="_blank" rel="noopener">카카오맵</a>` : ''}
+        </div>
+      </div>
+      <div class="dist">${(Number(s.distance) / 1000).toFixed(1)}km</div>`;
+    row.addEventListener('mouseenter', () => hi(i, true));
+    row.addEventListener('mouseleave', () => hi(i, false));
+    row.addEventListener('click', e => { if (e.target.tagName !== 'A') focusSalon(i); });   // 링크 클릭은 그대로 이동
+    list.appendChild(row);
+  });
+
+  drawMarkers(lat, lng, salons);
+}
+
+function drawMarkers(lat, lng, salons) {
+  if (!map) return;
+  clearMarkers();
+  const bounds = new kakao.maps.LatLngBounds();
+
+  // 내 위치 — 원으로 구분
+  const me = new kakao.maps.LatLng(lat, lng);
+  myMarker = new kakao.maps.Circle({
+    map, center: me, radius: 40, strokeWeight: 2, strokeColor: '#16130F',
+    strokeOpacity: 1, fillColor: '#FBF9F6', fillOpacity: 1,
+  });
+  bounds.extend(me);
+
+  salons.forEach((s, i) => {
+    const pos = new kakao.maps.LatLng(+s.y, +s.x);        // ★ 카카오는 x = 경도, y = 위도
+    const m = new kakao.maps.Marker({ map, position: pos, title: s.place_name });
+    kakao.maps.event.addListener(m, 'click', () => focusSalon(i));
+    markers.push(m);
+    bounds.extend(pos);
+  });
+  map.setBounds(bounds);                                 // 내 위치와 미용실이 모두 보이게
+}
+
+/* 목록 ↔ 지도 연결: 항목을 누르거나 마커를 누르면 같은 곳을 가리킨다 */
+function focusSalon(i) {
+  const s = lastSalons[i];
+  document.querySelectorAll('.salon').forEach((r, k) => r.classList.toggle('on', k === i));
+  document.querySelectorAll('.salon')[i]?.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  if (!map || !s) return;
+  const pos = new kakao.maps.LatLng(+s.y, +s.x);
+  map.panTo(pos);
+  if (label) label.setMap(null);
+  label = new kakao.maps.CustomOverlay({ map, position: pos, yAnchor: 1,
+    content: `<div class="map-label">${esc(s.place_name)}</div>` });
+}
+
+function clearMarkers() {
+  markers.forEach(m => m.setMap(null)); markers = [];
+  if (myMarker) { myMarker.setMap(null); myMarker = null; }
+  if (label) { label.setMap(null); label = null; }
+}
+function hi(i, on){ document.querySelectorAll('.salon')[i]?.classList.toggle('on', on); }
+
+/* ═══════════════════════════════════════════════════════════
+   화면 4 로 넘어가기
+   ═══════════════════════════════════════════════════════════ */
+async function revealFreeform() {
+  document.getElementById('freeformCta').hidden = false;
+  const q   = await fetchQuota();
+  const txt = document.getElementById('quotaText');
+  const btn = document.getElementById('btnFreeform');
+
+  if (!q.logged_in) {
+    txt.textContent = '로그인하면 이용할 수 있어요';
+    btn.textContent = '로그인하고 생성하기';
+    return;
+  }
+  if (q.remaining <= 0) {
+    // 버튼을 숨기지 않는다. 사라지면 기능 자체가 없다고 오해한다.
+    txt.className = 'quota out';
+    txt.innerHTML = '무료 생성 <b>0회</b> 남음 · 이전 결과는 마이페이지에서 볼 수 있어요';
+    btn.disabled = true;
+    return;
+  }
+  txt.innerHTML = `무료 생성 <b>${q.remaining}회</b> 남음`;
+}
+
+document.getElementById('btnFreeform').addEventListener('click', async () => {
+  const q = await fetchQuota();
+  if (!q.logged_in) { location.href = 'login.html'; return; }
+  if (q.remaining <= 0) return;
+  show(4);      // ★ state 를 그대로 물려받는다. 따로 넘길 것이 없다
+});
+
+/* ═══════════════════════════════════════════════════════════
+   화면 4 — 자유 생성
+   ═══════════════════════════════════════════════════════════ */
+/* 서버 템플릿의 '안내용 사본'. 실제 템플릿은 서버에만 있고,
+   여기를 고쳐도 서버 동작은 바뀌지 않는다. */
+const TEMPLATE_HEAD = 'Change only the hairstyle of the person in this photo to:';
+const TEMPLATE_TAIL =
+  'Keep the face, identity, skin tone, expression and background unchanged.\n' +
+  'Photorealistic, front facing, same lighting as the original.';
+
+const $prompt = document.getElementById('prompt');
+
+function enterScreen4() {
+  document.getElementById('shapeText').textContent = shapeKo(state.faceShape);
+  if (state.origUrl) document.getElementById('srcThumb').src = state.origUrl;
+  updatePreview();
+  refreshQuota();
+}
+
+async function fetchQuota() {
+  if (CONFIG.GEN_MOCK) {
+    if (state.remaining === null) state.remaining = 2;
+    return { logged_in:true, remaining:state.remaining };
+  }
+  try {
+    const res = await fetch(`${CONFIG.BACKEND_URL}/me/quota`, { credentials:'include' });
+    if (res.status === 401) return { logged_in:false, remaining:0 };
+    return await res.json();
+  } catch (_) { return { logged_in:false, remaining:0 }; }
+}
+
+async function refreshQuota() {
+  const q = await fetchQuota();
+  state.remaining = q.remaining;
+  const badge = document.getElementById('quotaBadge');
+  badge.textContent = `무료 생성 ${q.remaining}회 남음`;
+  badge.classList.toggle('out', q.remaining <= 0);
+  if (q.remaining <= 0) showError('무료 생성 2회를 모두 사용했어요. 만든 결과는 마이페이지에서 볼 수 있어요.');
+  syncGenButton();
+}
+
+document.getElementById('chips').addEventListener('click', e => {
+  if (!e.target.classList.contains('chip')) return;
+  $prompt.value = e.target.textContent;
+  onPromptInput(); $prompt.focus();
+});
+$prompt.addEventListener('input', onPromptInput);
+document.getElementById('consent').addEventListener('change', syncGenButton);
+
+function onPromptInput() {
+  const n = $prompt.value.length, c = document.getElementById('count');
+  c.textContent = `${n} / ${CONFIG.MAX_LEN}`;
+  c.classList.toggle('over', n >= CONFIG.MAX_LEN);
+  updatePreview(); syncGenButton();
+}
+function updatePreview() {
+  const v = $prompt.value.trim() || '(원하는 스타일을 입력하세요)';
+  document.getElementById('preview').innerHTML =
+    `${TEMPLATE_HEAD}\n  "<span class="ins">${esc(v)}</span>"\n\n${TEMPLATE_TAIL}`;
+}
+function syncGenButton() {
+  document.getElementById('btnGen').disabled = !(
+    $prompt.value.trim().length >= 2 &&
+    document.getElementById('consent').checked &&
+    state.remaining > 0 && !state.busy
+  );
+}
+
+document.getElementById('btnGen').addEventListener('click', generate);
+
+async function generate() {
+  const text = $prompt.value.trim();
+  hideError();
+  state.busy = true; syncGenButton();
+  const btn = document.getElementById('btnGen');
+  btn.textContent = '생성 중… (10초쯤 걸려요)';
+
+  const card = addPendingResult(text);
+  try {
+    const blob = await callGenerate(text);
+    fillResult(card, URL.createObjectURL(blob));
+  } catch (err) {
+    card.remove();
+    showError(genErrorMsg(err));
+  } finally {
+    state.busy = false;
+    btn.textContent = '생성하기';
+    await refreshQuota();      // 실패·차단이면 서버가 쿼터를 되돌린다
+  }
+}
+
+async function callGenerate(text) {
+  if (CONFIG.GEN_MOCK) return mockGenerate(text);
+  const fd = new FormData();
+  fd.append('file', state.file);
+  fd.append('prompt', text);        // ★ 서버가 템플릿에 끼워 넣는다. 그대로 쓰지 않는다
+  fd.append('consent', String(document.getElementById('consent').checked));   // 서버도 동의 여부를 다시 확인한다
+  const res = await fetch(`${CONFIG.BACKEND_URL}/generate`, { method:'POST', body:fd, credentials:'include' });
+  if (!res.ok) {
+    let code = String(res.status);
+    try { code = (await res.json())?.error?.code || code; } catch (_) {}
+    const e = new Error(code); e.code = code; throw e;
+  }
+  return res.blob();
+}
+
+function genErrorMsg(err) {
+  switch (err?.code) {
+    case 'QUOTA_EXCEEDED':  return '무료 생성 횟수를 모두 사용했어요.';
+    case 'CONTENT_BLOCKED': return '이 내용으로는 만들 수 없어요. 헤어스타일 설명으로 다시 시도해 주세요. (횟수는 차감되지 않았어요)';
+    case 'INVALID_PROMPT':  return '헤어스타일에 대한 설명만 입력할 수 있어요.';
+    default:                return '생성에 실패했어요. 잠시 후 다시 시도해 주세요. (횟수는 차감되지 않았어요)';
+  }
+}
+function showError(m){ const el=document.getElementById('err'); el.textContent=m; el.hidden=false; }
+function hideError(){ document.getElementById('err').hidden = true; }
+
+function addPendingResult(text) {
+  const box = document.createElement('div');
+  box.className = 'gen-result';
+  box.innerHTML = `<p class="pr">요청: <b>${esc(text)}</b></p>
+    <div class="skeleton"><div class="spinner"></div>만드는 중…</div>`;
+  document.getElementById('results').prepend(box);
+  box.scrollIntoView({ behavior:'smooth', block:'center' });
+  return box;
+}
+function fillResult(box, url) {
+  box.querySelector('.skeleton').outerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center">
+      <div class="ba">
+        <img src="${url}" alt="생성 결과">
+        <img class="before" src="${state.origUrl || ''}" alt="원본">
+        <span class="lbl l">BEFORE</span><span class="lbl r">AFTER</span>
+      </div>
+      <input type="range" min="0" max="100" value="50">
+    </div>`;
+  const before = box.querySelector('.before');
+  box.querySelector('input[type=range]').addEventListener('input', e => {
+    before.style.clipPath = `inset(0 ${100 - e.target.value}% 0 0)`;
+  });
+  box.dataset.url = url;
+}
+
+document.getElementById('btnBack').addEventListener('click', () => show(3));
+
+/* ═══════════════════════════════════════════════════════════
+   정리
+   ═══════════════════════════════════════════════════════════ */
+window.addEventListener('pagehide', () => {
+  state.results.forEach(u => URL.revokeObjectURL(u));
+  document.querySelectorAll('.gen-result[data-url]').forEach(b => URL.revokeObjectURL(b.dataset.url));
+});
+
+/* ═══════════════════════════════════════════════════════════
+   MOCK — 실제 서버에 붙이면 아래는 안 쓰인다
+   ═══════════════════════════════════════════════════════════ */
+function mockSynthesize(slug) {
+  return new Promise((res, rej) => setTimeout(() => {      // 실측 2.3초를 흉내
+    if (slug === 'full_bang' && Math.random() < 0.35) {
+      const e = new Error('GPU_BUSY'); e.code = 'GPU_BUSY'; return rej(e);
+    }
+    res(placeholder(slug, 'MOCK 합성 결과'));
+  }, 2300));
+}
+function mockGenerate(text) {
+  return new Promise((res, rej) => setTimeout(() => {
+    if (Math.random() < 0.2) {                              // 안전 필터 차단 UI 확인용
+      const e = new Error('CONTENT_BLOCKED'); e.code = 'CONTENT_BLOCKED'; return rej(e);
+    }
+    state.remaining = Math.max(0, state.remaining - 1);
+    res(placeholder(text, 'MOCK 생성 결과'));
+  }, 4000));
+}
+function placeholder(seed, label) {
+  const c = document.createElement('canvas'); c.width = c.height = 420;
+  const g = c.getContext('2d');
+  const hue = 28 + ([...String(seed)].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 14);
+  const grad = g.createLinearGradient(0, 0, 420, 420);
+  grad.addColorStop(0, `hsl(${hue} 18% 90%)`); grad.addColorStop(1, `hsl(${hue} 14% 80%)`);
+  g.fillStyle = grad; g.fillRect(0, 0, 420, 420);
+  g.fillStyle = `hsl(${hue} 20% 24%)`; g.textAlign = 'center';
+  g.font = 'bold 21px sans-serif'; g.fillText(label, 210, 200);
+  g.font = '15px sans-serif';       g.fillText(String(seed).slice(0, 22), 210, 230);
+  return new Promise(r => c.toBlob(r, 'image/png'));
+}
+function mockSalons(lat, lng) {
+  const names = ['준오헤어 강남점','이철헤어커커 신사','블루클럽 역삼','박승철헤어스튜디오','미용실 오후'];
+  return sleep(500).then(() => names.map((n, i) => ({
+    place_name:n, road_address_name:`서울 강남구 테헤란로 ${10 + i*7}`,
+    distance:String(300 + i*420), phone:'02-000-000' + i, x:lng + (Math.random()-.5)*.01, y:lat + (Math.random()-.5)*.01, place_url:'',
+  })));
+}
+
+/* 개발용 — 실제 배포에서는 이 블록과 위의 devbar 를 지운다 */
+document.getElementById('devbar').hidden = !CONFIG.USE_MOCK;
+document.getElementById('devFile').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  state.file = f;
+  state.origUrl = URL.createObjectURL(f);
+  document.getElementById('baBefore').src = state.origUrl;
+  document.getElementById('srcThumb').src = state.origUrl;
+});
+
+boot();
+
+/* 결과가 생기면 빈 자리 안내를 숨긴다 */
+new MutationObserver(() => {
+  const empty = document.getElementById('genEmpty');
+  if (empty) empty.hidden = document.getElementById('results').children.length > 0;
+}).observe(document.getElementById('results'), { childList: true });
+</script>
+</body>
+</html>

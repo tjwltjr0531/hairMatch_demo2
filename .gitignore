@@ -1,0 +1,90 @@
+# ============================================
+#  HairMatch .gitignore
+# ============================================
+
+# --- 가상환경 ---
+venv/
+venv_*/
+.venv/
+env/
+ENV/
+
+# --- 파이썬 ---
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- 비밀정보 (절대 커밋 금지) ---
+.env
+.env.*
+!.env.example
+*secret*
+*credential*
+config.local.*
+
+# --- 사전학습 모델 (약 7.6GB, GitHub 100MB 제한 초과) ---
+pretrained_models/
+*.pt
+*.pth
+*.pkl
+*.dat
+*.ckpt
+*.npz
+
+# --- 얼굴 사진 (초상권 / 개인정보) ---
+unprocessed/
+input/
+output/
+perf_out/
+sweep_out/
+static/results/
+/datasets/
+/dataset/
+
+# --- 실행 산출물 ---
+perf_grid.png
+perf_log.csv
+sweep_log.csv
+out.png
+Claude outputs/
+*.zip
+*.db
+*.sqlite3
+
+# --- 빌드 캐시 ---
+torch_ext/
+.ninja_deps
+.ninja_log
+build/
+
+# --- 설치 파일 ---
+*.exe
+*.msi
+*.whl
+
+# --- 에디터 / OS ---
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# --- 로그 ---
+*.log
+build_err.txt
+err.txt
+
+# ============================================
+#  예외: 이건 커밋한다
+# ============================================
+# 학습된 모델 (팀 공유용, 22MB / 58KB)
+!web/hairmatch_v2.keras
+!web/hybrid_model.joblib
+
+# 레퍼런스 이미지 (폴더 생성 시 사용)
+!references/
+!references/*.png
