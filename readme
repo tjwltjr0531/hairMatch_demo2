@@ -1,0 +1,250 @@
+# HairMatch
+
+얼굴형 분석 기반 헤어스타일 추천 + HairFastGAN 헤어 합성 캡스톤 프로젝트
+
+- 얼굴형 분류: MediaPipe 랜드마크 + CNN 하이브리드 분류기 (테스트 Top-1 74.5% / Top-2 91.0%)
+- 헤어 합성: [HairFastGAN](https://github.com/AIRI-Institute/HairFastGAN) (MIT License) 기반
+- 부가 기능: 카카오 지도 기반 주변 미용실 찾기, Gemini 프롬프트 합성
+
+---
+
+## 1. 구조
+
+두 개의 서버로 나뉩니다. TensorFlow(분류)와 PyTorch+CUDA(합성)의 의존성이 충돌해서 가상환경을 따로 씁니다.
+
+```
+브라우저 ──▶ 웹 서버 :8000  (web/, venv_web, TensorFlow)
+                │   /analyze  /recommend  /salons  /generate  /synthesize
+                │
+                └─ /synthesize 프록시 ──▶ 합성 서버 :8001  (inference/, venv_hf, PyTorch + GPU)
+```
+
+| 폴더 | 내용 |
+|---|---|
+| `web/` | FastAPI 웹 서버, 얼굴형 분류 모델, DB 스키마, 프론트엔드(`static/`) |
+| `inference/` | HairFastGAN 합성 서버 (GPU 필요) |
+| `HairFastGAN/` | HairFastGAN 원본 코드 + 수정본 (`Two_stage.py`, `align_simple.py`, `gen_refs.py`, `param_sweep.py`) |
+| `setup_hairfast.ps1` | 합성 환경 최초 설치 스크립트 |
+| `setup_env.bat` | 합성 서버 실행 전 CUDA/MSVC 환경변수 설정 (매 세션) |
+
+> 합성 서버 없이 **웹 서버만으로도** 얼굴형 분석·추천·미용실 찾기는 동작합니다. 합성 요청만 실패합니다.
+
+---
+
+## 2. 저장소에 포함되지 않은 것
+
+용량·초상권·보안 문제로 `.gitignore` 처리되어 있습니다. 새 환경에서 직접 준비해야 합니다.
+
+| 항목 | 위치 | 준비 방법 |
+|---|---|---|
+| 가상환경 | `venv_hf/`, `web/venv_web/` | 아래 설치 절차로 새로 생성 |
+| HairFastGAN 사전학습 가중치 (약 7.6GB) | `HairFastGAN/pretrained_models/` | `setup_hairfast.ps1` 이 Hugging Face에서 받음 |
+| 헤어 레퍼런스 이미지 | `HairFastGAN/input/ref_{slug}.png` | 팀 공유 드라이브에서 복사하거나 `gen_refs.py`로 생성 (4-4 참고) |
+| API 키 | 환경변수 | 3-3 참고 |
+| DB | PostgreSQL 또는 SQLite | 3-2 참고 |
+
+---
+
+## 3. 웹 서버 설치 (필수)
+
+### 3-0. 준비물
+- Windows 10/11
+- Python **3.11** (TensorFlow 2.15 요구사항 기준)
+- Git
+- PostgreSQL (선택 — SQLite로 대체 가능)
+
+### 3-1. 클론 & 가상환경
+
+```powershell
+git clone https://github.com/tjwltjr0531/hairMatch_demo2.git
+cd hairMatch_demo2\web
+
+py -3.11 -m venv venv_web
+.\venv_web\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements_web.txt
+pip install httpx google-genai        # requirements_web.txt 에 빠져 있음
+```
+
+> PowerShell에서 `Activate.ps1` 실행이 막히면 먼저
+> `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`
+
+### 3-2. DB 준비
+
+**방법 A — SQLite (가장 간단, 설치 불필요)**
+```powershell
+$env:DATABASE_URL = "sqlite:///hairmatch.db"
+python db_setup_v2.py
+```
+
+**방법 B — PostgreSQL**
+```powershell
+# psql 등에서 먼저: CREATE DATABASE hairmatch_db;
+$env:PGCLIENTENCODING = "UTF8"
+$env:DATABASE_URL = "postgresql+psycopg2://postgres:<비밀번호>@localhost:5432/hairmatch_db"
+python db_setup_v2.py
+```
+
+확인: `python db_setup_v2.py --show`
+
+### 3-3. 환경변수
+
+| 변수 | 필수 | 용도 | 기본값 |
+|---|---|---|---|
+| `DATABASE_URL` | ✅ | DB 연결 문자열 | `postgresql+psycopg2://postgres:changeme@localhost:5432/hairmatch_db` |
+| `KAKAO_REST_KEY` | 미용실 찾기 | 카카오 로컬 API (REST 키, 서버 전용) | 없음 |
+| `GEMINI_API_KEY` | 프롬프트 합성 | Google AI Studio 키 | 없음 |
+| `GEMINI_IMAGE_MODEL` | | Gemini 이미지 모델명 | `gemini-3.1-flash-lite-image` |
+| `INFERENCE_URL` | | 합성 서버 주소 | `http://localhost:8001` |
+| `AMBIGUOUS_GAP` | | 1·2순위 확률 차가 이보다 작으면 두 얼굴형 모두 제시 | `0.15` |
+
+설정 방법:
+```powershell
+# 현재 창에서만
+$env:KAKAO_REST_KEY = "..."
+
+# 영구 저장 (새 창부터 적용)
+setx KAKAO_REST_KEY "..."
+```
+
+> ⚠️ REST 키·Gemini 키는 **절대 코드나 `config.js`에 넣지 마세요.**
+> `web/static/config.js` 에는 브라우저에 공개돼도 되는 **카카오 JavaScript 키**만 둡니다.
+
+### 3-4. 프론트엔드 설정 — `web/static/config.js`
+
+```js
+window.HM_CONFIG = {
+  MAP_KEY  : '카카오 JavaScript 키',
+  GEN_MOCK : true,    // Gemini 결제 연결 후 false
+};
+```
+
+카카오 개발자 콘솔의 **플랫폼 → Web 사이트 도메인**에 `http://localhost:8000` 이 등록되어 있어야 지도가 뜹니다.
+다른 카카오 앱 키를 쓴다면 그 앱에도 같은 도메인을 등록하세요.
+
+### 3-5. 실행
+
+**반드시 `web/` 폴더에서 실행합니다.** 모델 파일(`hybrid_model.joblib`, `hairmatch_v2.keras`)을 상대경로로 찾습니다.
+
+```powershell
+cd web
+.\venv_web\Scripts\Activate.ps1
+uvicorn web_main:app --host 127.0.0.1 --port 8000
+```
+
+브라우저에서 **http://localhost:8000/** 접속
+(`127.0.0.1` 로 열면 자동으로 `localhost` 로 이동합니다 — 카카오 지도 도메인 제한 때문)
+
+> DB 없이 지도·미용실·Gemini만 시험하려면 `python map_test_server.py`
+
+---
+
+## 4. 합성 서버 설치 (선택, NVIDIA GPU 필요)
+
+### 4-0. 준비물
+- NVIDIA GPU (VRAM 8GB 이상 권장 — 실측 피크 약 7.2GB) + 드라이버
+- Python 3.11
+- [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) — "C++를 사용한 데스크톱 개발" 워크로드
+- CUDA Toolkit 12.x (MSVC 14.4x 사용 시 12.4 이상 권장)
+- Git LFS (`winget install GitHub.GitLFS`)
+
+### 4-1. 최초 설치 (저장소 루트에서)
+
+```powershell
+cd hairMatch_demo2
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\setup_hairfast.ps1
+```
+
+스크립트가 하는 일: `venv_hf` 생성 → PyTorch(cu121) 설치 → 의존성 설치 → Hugging Face에서 `pretrained_models/` 다운로드 → 테스트 합성
+
+- 첫 실행 시 CUDA 커널 컴파일로 **수 분** 걸립니다. 중간에 끊지 마세요.
+- 가중치 파일이 KB 단위로 보이면 Git LFS가 실패한 것입니다.
+
+추가 설치:
+```powershell
+.\venv_hf\Scripts\Activate.ps1
+pip install fastapi uvicorn python-multipart dlib
+```
+> `dlib` 는 Windows에서 빌드가 실패할 수 있습니다. 실패하면 Python 3.11용 prebuilt wheel을 찾아 설치하세요.
+
+### 4-2. `setup_env.bat` 경로 수정
+
+이 파일에는 개발 PC 기준 경로가 박혀 있습니다. 새 PC에 맞게 고치세요.
+
+| 항목 | 현재 값 | 바꿀 것 |
+|---|---|---|
+| 프로젝트 경로 | `D:\hairmatch` | 클론한 경로 |
+| 커널 캐시 | `D:\torch_ext` | 원하는 경로 |
+| `TORCH_CUDA_ARCH_LIST` | `8.6` (RTX 30xx) | 본인 GPU의 Compute Capability (RTX 40xx = `8.9`) |
+| CUDA / MSVC 경로 | 여러 후보 | 설치 위치가 다르면 추가 |
+
+### 4-3. 레퍼런스 이미지 배치
+
+합성 서버는 `HairFastGAN/input/ref_{slug}.png` 가 있는 스타일만 합성합니다. 슬러그는 `web/db_setup_v2.py` 의 `HAIRSTYLES` 와 **같아야** 합니다.
+
+| 성별 | 슬러그 |
+|---|---|
+| female | `tucked_bob`, `hush`, `long_wave`, `full_bang`, `gh` |
+| male | `regent`, `dandy`, `asperm`, `leaf`, `hippie` |
+
+선택: `ref_bald.png` 가 있으면 `TWO_STAGE_SLUGS` 로 지정한 스타일은 2단계 합성(시간 2배)을 합니다.
+
+### 4-4. 레퍼런스 이미지를 새로 만들 때
+
+StyleGAN2로 실존하지 않는 얼굴을 생성하므로 초상권 문제가 없습니다.
+```powershell
+cd HairFastGAN
+python gen_refs.py                 # gen_out/ 에 후보 100장 + gen_contact.png
+copy gen_out\seed_0023.png input\ref_hush.png
+```
+
+### 4-5. 실행 (새 CMD 창)
+
+```bat
+<프로젝트경로>\setup_env.bat
+cd <프로젝트경로>\inference
+python infer_server.py
+```
+
+`warm-up 완료` 가 출력된 뒤부터 합성이 가능합니다 (1건당 약 2.3초, RTX 3070 기준).
+상태 확인: http://localhost:8001/infer/health
+
+| 환경변수 | 용도 | 기본값 |
+|---|---|---|
+| `HAIRFAST_DIR` | HairFastGAN 폴더 위치 | `../HairFastGAN` |
+| `TWO_STAGE_SLUGS` | 2단계 합성할 슬러그 (쉼표 구분) | 없음 |
+| `INFER_PORT` | 포트 | `8001` |
+
+---
+
+## 5. 매번 실행할 때 요약
+
+| 순서 | 창 | 명령 |
+|---|---|---|
+| 1 | CMD 창 1 (합성, 선택) | `setup_env.bat` → `cd inference` → `python infer_server.py` |
+| 2 | PowerShell 창 2 (웹) | `cd web` → `.\venv_web\Scripts\Activate.ps1` → 환경변수 설정 → `uvicorn web_main:app --port 8000` |
+| 3 | 브라우저 | http://localhost:8000/ |
+
+---
+
+## 6. 문제 해결
+
+| 증상 | 원인 / 해결 |
+|---|---|
+| `hybrid_model.joblib 없음` | `web/` 폴더가 아닌 곳에서 실행함 → `cd web` 후 실행 |
+| 지도가 안 뜸 | `localhost:8000` 이 아닌 주소로 열었거나, 카카오 콘솔에 도메인 미등록 |
+| 미용실 목록 `KAKAO_KEY_MISSING` | `KAKAO_REST_KEY` 미설정. `setx` 후에는 **새 창**을 열어야 적용 |
+| `/analyze` 가 503 | 분류 모델 로드 실패 → 서버 시작 로그 확인 |
+| `/recommend` 404 "추천 데이터가 없습니다" | `python db_setup_v2.py` 미실행 |
+| DB 한글 인코딩 오류 (PostgreSQL) | `$env:PGCLIENTENCODING = "UTF8"` |
+| 합성이 `GPU_BUSY` | 한 번에 1건만 처리. 대기 3건 초과 시 거절 |
+| 합성 스타일이 목록에서 빠짐 | `HairFastGAN/input/ref_{slug}.png` 누락 또는 슬러그 불일치 |
+| `cl.exe` / `nvcc` 오류 | `setup_env.bat` 를 먼저 실행했는지, Build Tools·CUDA 설치 여부 확인 |
+| CUDA 12.1 + 최신 MSVC 충돌 (STL1002) | CUDA 12.4 이상 설치, 또는 `setup_env.bat` 의 `-allow-unsupported-compiler` 유지 |
+
+---
+
+## 7. 라이선스
+
+- `HairFastGAN/` 디렉터리: MIT License, Copyright (c) 2024 AIRI — `HairFastGAN/LICENSE` 참고
