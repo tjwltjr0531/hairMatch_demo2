@@ -39,9 +39,10 @@
   8. 문구 정정             MediaPipe → CNN, 3~5초 → 약 10초, 100% 무료 → 조건 명시
 
   이미지는 자리만 잡아 뒀다. img/ 아래에 같은 이름으로 넣으면 바로 붙는다.
-    img/logo-mark.svg     히어로 오른쪽 로고 마크 (벡터)
-    img/before-m.jpg      Before & After — 남성 원본
-    img/after-m.jpg       Before & After — 남성 합성 결과
+    img/hero.jpg          히어로 배경 — 오른쪽에 인물, 왼쪽은 단색 여백인 가로 사진 (2048px 이상 권장)
+    img/logo-mark.svg     로고 마크 (벡터, 현재 히어로에서는 미사용)
+    img/before-m.jpg      Before & After — 원본 (정렬본, 가로 418:368)
+    img/after-m.jpg       Before & After — 합성 결과 (같은 비율)
     img/step-01~04.jpg    4단계 설명               5:4
     img/styles/{slug}.jpg 스타일 10종 — input\ref_{slug}.png 정렬본을 이름만 바꿔 넣으면 된다
                           여성 tucked_bob hush long_wave full_bang gh
@@ -186,28 +187,40 @@ hr.rule{ border:0; border-top:1px solid var(--line); margin:0; }
 /* ══════════════════════════════════════════════
    히어로
    ══════════════════════════════════════════════ */
- /* 히어로 — 밝은 배경, 왼쪽 문구 / 오른쪽 로고 마크 */
+ /* 히어로 — 인물 사진 배경. 사진은 오른쪽에 인물, 왼쪽은 단색 여백이어야 글자가 읽힌다.
+    사진이 없으면 같은 톤의 단색으로 보인다. */
 .hero{
-  position: relative; overflow:hidden;
-  background: linear-gradient(90deg, #FFFFFF 0%, var(--paper) 55%, var(--paper-2) 100%);
-  border-bottom: 1px solid var(--line);
+  position: relative; overflow:hidden; color:#FFF;
+  background:#8E8378 url("img/hero.jpg") no-repeat 70% 30% / cover;
+}
+/* 글자 쪽(왼쪽)만 살짝 어둡게 — 흰 글자 대비 확보 */
+.hero::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background: linear-gradient(90deg, rgba(58,48,40,.38) 0%, rgba(58,48,40,.18) 38%, rgba(58,48,40,0) 58%);
 }
 .hero .wrap{
-  display:grid; grid-template-columns: 1.05fr 1fr; align-items:center; gap: var(--s5);
-  min-height: clamp(460px, 72vh, 680px); padding-top: var(--s6); padding-bottom: var(--s6);
+  position: relative; display:flex; align-items:center;
+  min-height: clamp(480px, 78vh, 760px); padding-top: var(--s7); padding-bottom: var(--s7);
 }
-.hero .eyebrow{ font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; letter-spacing:.16em; color: var(--ink-2); }
-.hero .eyebrow .yr{ margin-left: var(--s2); }
-.hero .display{ color: var(--ink); font-weight:400; font-size: clamp(44px, 6.4vw, 88px); line-height: .98; margin: var(--s3) 0; }
+.hero .copy{ max-width: 560px; }
+.hero .eyebrow{ font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; letter-spacing:.16em; color: rgba(255,255,255,.88); }
+.hero .eyebrow .yr::before{ content:"·"; margin: 0 var(--s1); }
+.hero .display{ color:#FFF; font-weight:400; font-size: clamp(44px, 6.4vw, 92px); line-height: .98; margin: var(--s3) 0; }
 .hero .display em{ font-style: italic; }
-.hero .lede{ color: var(--ink-2); margin: 0 0 var(--s5); max-width: 30ch; font-size: 15px; line-height: 1.7; }
-.hero .btn.line{ border-color: var(--ink-2); }
+.hero .lede{ color: rgba(255,255,255,.92); margin: 0 0 var(--s5); max-width: 30ch; font-size: 15px; line-height: 1.7; }
+.hero .btn{ background:#FFF; border-color:#FFF; color: var(--ink); }
+.hero .btn:hover{ background: transparent; color:#FFF; }
 .hero .btn .arr{ font-family: var(--serif); font-size: 16px; line-height: 1; margin-left: var(--s2); }
-.hero .mark{ justify-self:center; width: min(100%, 420px); }
-.hero .mark img{ width:100%; height:auto; filter: drop-shadow(0 0 22px rgba(138,115,85,.18)); }
 @media (max-width: 900px){
-  .hero .wrap{ grid-template-columns: 1fr; min-height: 0; padding-top: var(--s5); padding-bottom: var(--s6); }
-  .hero .mark{ order:-1; width: 56%; max-width: 260px; }
+  /* 좁은 화면: 사진은 위쪽(인물 얼굴), 글자는 그 아래 단색 위에 — 얼굴 위로 글자가 겹치지 않게 */
+  .hero{
+    background:
+      linear-gradient(180deg, rgba(110,98,88,0) 200px, #6E6258 360px) no-repeat,
+      url("img/hero.jpg") no-repeat 76% 0 / auto 380px,
+      #6E6258;
+  }
+  .hero::before{ display:none; }
+  .hero .wrap{ min-height: 0; padding-top: 320px; padding-bottom: var(--s6); }
 }
 
 /* ══════════════════════════════════════════════
@@ -283,10 +296,14 @@ section.band.paper{ background: var(--surface); }
 /* ══════════════════════════════════════════════
    Before / After — 어긋난 2컬럼
    ══════════════════════════════════════════════ */
-.ba-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: var(--s4); align-items:start; }
-.ba-grid .col-b{ margin-top: var(--s7); }
-@media (max-width: 900px){ .ba-grid{ grid-template-columns:1fr; } .ba-grid .col-b{ margin-top:0; } }
-.ba-grid .fig{ aspect-ratio: 4/5; }
+/* 처음 배치(제목 → 엇갈린 두 장 → 설명)는 유지하고, 두 장의 칸을 바로 위 '사진 업로드' 영역과 같은 격자로 맞춘다.
+   (.split.narrow 와 같은 2열·간격 → Before 는 왼쪽 설명 칸, After 는 업로드 상자와 같은 세로선에 선다) */
+.ba-grid{ display:grid; grid-template-columns: 1fr 1fr; gap: var(--s6); align-items:start; }
+.ba-grid .col-b{ margin-top: var(--s6); }
+@media (max-width: 900px){ .ba-grid{ gap: var(--s3); } .ba-grid .col-b{ margin-top: var(--s4); } }
+@media (max-width: 560px){ .ba-grid{ grid-template-columns:1fr; } .ba-grid .col-b{ margin-top:0; } }
+.ba-grid .fig{ aspect-ratio: 418 / 368; }
+.ba-grid .fig::after{ display:none; }
 .ba-cap{
   display:flex; justify-content:space-between; align-items:baseline;
   margin-top: var(--s2); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color: var(--ink-3);
@@ -404,16 +421,13 @@ footer .bottom{
 </header>
 
 <!-- ══════════════ 히어로 ══════════════ -->
-<section class="hero">
+<section class="hero" role="img" aria-label="긴 웨이브 헤어스타일의 인물 사진">
   <div class="wrap">
     <div class="copy">
       <p class="eyebrow">Personal Hair Finder<span class="yr">2026</span></p>
       <h1 class="display">A better frame<br>for <em>your face.</em></h1>
       <p class="lede">사진 한 장으로 찾아보는 얼굴형과<br>당신만의 헤어스타일.</p>
-      <a href="#upload" class="btn line">내 얼굴형 찾아보기<span class="arr">→</span></a>
-    </div>
-    <div class="mark">
-      <img src="img/logo-mark.svg" alt="HairMatch 로고 — 옆얼굴과 흐르는 머리카락">
+      <a href="#upload" class="btn">내 얼굴형 알아보기<span class="arr">→</span></a>
     </div>
   </div>
 </section>
@@ -496,15 +510,15 @@ footer .bottom{
     <div class="ba-grid">
       <div>
         <figure class="fig" data-src="img/before-m.jpg">
-          <img src="img/before-m.jpg" alt="합성 전 원본 사진 (남성 예시)" onerror="this.hidden=true">
+          <img src="img/before-m.jpg" alt="합성 전 원본 사진 (여성 예시, 실존하지 않는 생성 인물)" onerror="this.hidden=true">
         </figure>
         <div class="ba-cap"><b>Before</b><span>원본</span></div>
       </div>
       <div class="col-b">
         <figure class="fig" data-src="img/after-m.jpg">
-          <img src="img/after-m.jpg" alt="AI 합성 결과 (남성 예시)" onerror="this.hidden=true">
+          <img src="img/after-m.jpg" alt="AI 합성 결과 — 풀뱅 스타일 (여성 예시)" onerror="this.hidden=true">
         </figure>
-        <div class="ba-cap"><b>After</b><span>AI 합성</span></div>
+        <div class="ba-cap"><b>After</b><span>결과</span></div>
       </div>
     </div>
 

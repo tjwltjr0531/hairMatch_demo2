@@ -78,6 +78,25 @@ async def synthesize(
                     headers=headers)
 
 
+@router.post("/align")
+async def align(file: UploadFile = File(...)):
+    """Before/After 비교용 정렬 원본. 합성 서버의 /infer/align 을 그대로 넘긴다"""
+    data = await file.read()
+    files = {"file": (file.filename or "upload.jpg", data, file.content_type or "image/jpeg")}
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3.0, read=60.0, write=30.0, pool=5.0)) as c:
+            r = await c.post(f"{INFERENCE_URL}/infer/align", files=files)
+    except httpx.ConnectError:
+        return _err(503, "INFERENCE_DOWN")
+    except httpx.TimeoutException:
+        return _err(504, "INFERENCE_TIMEOUT")
+    finally:
+        del data
+    return Response(content=r.content, status_code=r.status_code,
+                    media_type=r.headers.get("content-type", "application/octet-stream"),
+                    headers={"Cache-Control": "no-store"})
+
+
 @router.get("/synthesize/health")
 async def synth_health():
     """발표·부스 직전 확인용: warm=true, mock=false 인지"""

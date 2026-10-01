@@ -558,6 +558,7 @@ console.info('[HairMatch] USE_MOCK=%s SALON_MOCK=%s GEN_MOCK=%s MAP_KEY=%s',
 const state = {
   file      : null,
   origUrl   : null,
+  beforeUrl : null,      // Before/After 비교용 — 합성과 같은 구도로 정렬한 원본 (없으면 origUrl)
   gender    : 'female',
   faceShape : null,
   styleSlug : null,
@@ -652,6 +653,7 @@ async function boot() {
 
   RECOMMENDED = await buildRecommendList(data);
   if (state.origUrl) document.getElementById('baBefore').src = state.origUrl;
+  loadAlignedBefore();      // 기다리지 않는다. 카드 합성과 같이 진행된다
   if (!RECOMMENDED.length) {
     // DB 추천이 비었거나(슬러그 불일치) 서버 오류 — 빈 화면 대신 이유를 보여 준다
     document.getElementById('resultGrid').innerHTML =
@@ -826,6 +828,23 @@ function synthErrorMsg(err) {
       || '합성에 실패했어요';
 }
 
+/* 합성 결과는 FFHQ 정렬(얼굴 중심 1024 정사각형)로 나오는데 원본은 업로드 구도 그대로라
+   슬라이더를 움직이면 두 장의 크기·위치가 어긋난다. 원본도 서버에서 같은 방식으로 정렬해 받아 둔다.
+   실패하면(구버전 서버 등) 원본을 그대로 쓴다. */
+async function loadAlignedBefore() {
+  if (CONFIG.USE_MOCK || !state.file || state.beforeUrl) return;
+  try {
+    const fd = new FormData();
+    fd.append('file', state.file);
+    const res = await fetch(`${CONFIG.BACKEND_URL}/align`, { method: 'POST', body: fd });
+    if (!res.ok) throw new Error(String(res.status));
+    state.beforeUrl = URL.createObjectURL(await res.blob());
+    document.getElementById('baBefore').src = state.beforeUrl;
+  } catch (err) {
+    console.warn('[align] 정렬 원본을 받지 못해 원본을 그대로 씁니다', err);
+  }
+}
+
 async function synthesize(slug, retry = CONFIG.RETRY) {
   if (CONFIG.USE_MOCK) return mockSynthesize(slug);
 
@@ -851,7 +870,7 @@ function selectStyle(style) {
 
   document.getElementById('selName').textContent = style.name_ko;
   document.getElementById('baAfter').src  = state.results.get(style.slug);
-  document.getElementById('baBefore').src = state.origUrl || '';
+  document.getElementById('baBefore').src = state.beforeUrl || state.origUrl || '';
 
   const panel = document.getElementById('selectedPanel');
   panel.hidden = false;
@@ -1250,6 +1269,7 @@ document.getElementById('btnBack').addEventListener('click', () => show(3));
    ═══════════════════════════════════════════════════════════ */
 window.addEventListener('pagehide', () => {
   state.results.forEach(u => URL.revokeObjectURL(u));
+  if (state.beforeUrl) URL.revokeObjectURL(state.beforeUrl);
   document.querySelectorAll('.gen-result[data-url]').forEach(b => URL.revokeObjectURL(b.dataset.url));
 });
 
